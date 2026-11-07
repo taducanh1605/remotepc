@@ -1,0 +1,14 @@
+{
+  "id": "./",
+  "name": "Njk Browser Stream",
+  "short_name": "Njk Stream",
+  "description": "Authenticated Windows desktop streaming over WebRTC",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#101623",
+  "theme_color": "#141c2d",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
