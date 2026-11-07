@@ -5,6 +5,10 @@ const screen = $("screen");
 let pc, channel, endpoint, token, sessionId, resizeTimer, pendingInstall, statsTimer;
 let generation = 0;
 let backend = "standalone";
+let queuePosition = 0;
+let displayLeader = false;
+let composingText = false;
+let committedComposition;
 let micChannel, micStream, micContext;
 const status = (text) => { $("status").textContent = text; };
 const dimensions = () => viewportDimensions(window.visualViewport || { width: innerWidth, height: innerHeight }, devicePixelRatio);
@@ -63,6 +67,11 @@ $("connection").addEventListener("submit", async (event) => {
     channel.addEventListener("message", (event) => {
       try {
         const message = JSON.parse(event.data);
+        if (message.type === "queue") {
+          queuePosition = message.position;
+          status(message.active ? "Your browser session is active; waiting for video frames…" : `Queued: ${message.position} browser session(s) ahead.`);
+        }
+        if (message.type === "leadership") displayLeader = message.leader === true;
         if (message.type === "text-focus" && typeof message.editable === "boolean") {
           $("remote-text").hidden = $("remote-text-label").hidden = $("remote-text-help").hidden = !message.editable;
           if (message.editable) $("remote-text").focus();
@@ -116,7 +125,7 @@ $("connection").addEventListener("submit", async (event) => {
       for (const report of stats.values()) {
         if (report.type === "inbound-rtp" && report.kind === "video") decoded += report.framesDecoded || 0;
       }
-      if (decoded > 0) status(`Streaming · ${screen.videoWidth}×${screen.videoHeight} · ${decoded} decoded frames`);
+      if (decoded > 0 && queuePosition === 0) status(`Streaming · ${screen.videoWidth}×${screen.videoHeight} · ${decoded} decoded frames · ${backend === "native-host" ? (displayLeader ? "display leader" : "shared display follower") : "standalone"}`);
     }, 2000);
     screen.focus();
   } catch (error) {
@@ -211,15 +220,26 @@ screen.addEventListener("pointercancel", release);
 screen.addEventListener("lostpointercapture", release);
 screen.addEventListener("wheel", (event) => { send({ type: "wheel", delta: Math.max(-1200,Math.min(1200,event.deltaY)) }); event.preventDefault(); }, { passive: false });
 $("remote-text").addEventListener("beforeinput", (event) => {
-  if (event.isComposing) return;
+  if (composingText || event.isComposing) return;
+  if (event.inputType === "insertFromComposition" || (committedComposition && event.data === committedComposition)) {
+    committedComposition = undefined;
+    event.preventDefault();
+    return;
+  }
   if (event.inputType === "deleteContentBackward") {
     send({type:"key",code:"Backspace",down:true});
     send({type:"key",code:"Backspace",down:false});
   } else if (event.data) send({type:"text",text:event.data});
   event.preventDefault();
 });
-$("remote-text").addEventListener("compositionend", (event) => { if (event.data) send({type:"text",text:event.data}); $("remote-text").value = ""; });
-$("remote-text").addEventListener("input", () => { $("remote-text").value = ""; });
+$("remote-text").addEventListener("compositionstart", () => { composingText = true; });
+$("remote-text").addEventListener("compositionend", (event) => {
+  composingText = false;
+  committedComposition = event.data;
+  if (event.data) send({type:"text",text:event.data});
+  setTimeout(() => { committedComposition = undefined; $("remote-text").value = ""; }, 0);
+});
+$("remote-text").addEventListener("input", () => { if (!composingText) $("remote-text").value = ""; });
 const resized = () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => send({ type: "resize", ...dimensions() }), 500);
