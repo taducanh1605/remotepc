@@ -25,6 +25,7 @@ let keyboardVisible = false;
 let lastDimensions;
 let micChannel, micStream, micContext, trustPopup, trustOrigin, trustNonce, trustTimer;
 let stopPromise;
+let remoteLaunch;
 let focusRequest = 0, pendingFocus = 0, focusTimer;
 const contactGenerations = new Map();
 const activePointers = new Map();
@@ -37,6 +38,11 @@ let motionSequence = 0;
 const status = (text) => { $("status").textContent = $("stream-status").textContent = text; };
 const viewport = () => visibleViewport(window.visualViewport, { width: innerWidth, height: innerHeight }, navigator.virtualKeyboard?.boundingRect);
 const dimensions = () => viewportDimensions(viewport(), 1);
+function requestedQuality() {
+  const fps = Number($("stream-fps").value), size = dimensions();
+  const bitrateKbps = $("stream-bitrate").value === "auto" ? Math.max(700, Math.min(5000, Math.floor(size.width * size.height * fps / 12000))) : Number($("stream-bitrate").value);
+  return { fps, bitrateKbps };
+}
 try {
   const saved = localStorage.getItem("njk-host-origin");
   if (saved) $("host").value = new URL(hostEndpoint(saved)).origin;
@@ -46,6 +52,17 @@ function saveHost() {
   try { localStorage.setItem("njk-host-origin", origin); }
   catch (error) { status(`Host address could not be saved: ${error.message}`); }
   return origin;
+}
+const launchParameters = new URLSearchParams(location.hash.slice(1));
+if (launchParameters.has("ticket")) {
+  history.replaceState(null, "", location.pathname + location.search);
+  try {
+    const host = new URL(hostEndpoint(launchParameters.get("host") || "")).origin;
+    const ticket = launchParameters.get("ticket");
+    if (!/^[a-f0-9]{32}$/.test(ticket || "")) throw new Error("Invalid ESP Wake connection ticket.");
+    $("host").value = host;
+    remoteLaunch = { host, ticket };
+  } catch (error) { status(error.message); }
 }
 const send = (message) => {
   if (channel?.readyState !== "open") return;
@@ -101,6 +118,7 @@ async function stopSession(notify) {
   screen.srcObject = null;
   $("stream-shell").hidden = true;
   document.body.classList.remove("streaming");
+  document.querySelector('meta[name="theme-color"]').content = "#14231d";
   document.documentElement.style.removeProperty("--viewport-height");
   document.documentElement.style.removeProperty("--viewport-top");
   lastDimensions = undefined;
@@ -115,6 +133,7 @@ async function stopSession(notify) {
   $("apply-quality").disabled = true;
   $("exit-quit").disabled = true;
   $("latency").textContent = "Control RTT: measuring…";
+  $("quality-request").textContent = "";
   capabilities = { touch: false, pen: false };
   queuePosition = 0;
   displayLeader = false;
@@ -165,7 +184,14 @@ $("connection").addEventListener("submit", async (event) => {
         }
         if (message.type === "leadership") displayLeader = message.leader === true;
         if (message.type === "quality" && message.fps && message.bitrateKbps) {
-          $("video-quality").textContent = `${message.fps} FPS · ${message.bitrateKbps} kbps`;
+          $("quality-request").textContent = message.success === false
+            ? "Host rejected the quality change."
+            : `Host accepted ${message.fps} FPS · ${message.bitrateKbps} kbps; waiting for encoder confirmation.`;
+        }
+        if (message.type === "bitrate-applied") {
+          $("quality-request").textContent = message.success === true
+            ? `Encoder applied ${message.bitrateKbps} kbps.`
+            : "Encoder could not apply the bitrate change. Previous quality remains active.";
         }
         if (message.type === "text-focus" && typeof message.editable === "boolean") {
           if (message.request !== pendingFocus || !pendingFocus) return;
@@ -233,7 +259,7 @@ $("connection").addEventListener("submit", async (event) => {
     }
     const response = await fetch(endpoint, {
       method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ sdp: peer.localDescription.sdp, ...dimensions() }),
+      body: JSON.stringify({ sdp: peer.localDescription.sdp, ...dimensions(), ...requestedQuality() }),
       cache: "no-store", signal: AbortSignal.timeout(20000),
     });
     if (!response.ok) {
@@ -262,6 +288,7 @@ $("connection").addEventListener("submit", async (event) => {
     }
     await peer.setRemoteDescription({ type: "answer", sdp: answer.sdp });
     $("connection").hidden = true;
+    document.querySelector('meta[name="theme-color"]').content = "#000000";
     $("stream-shell").hidden = false;
     document.body.classList.add("streaming");
     resized();
@@ -317,21 +344,25 @@ async function leaveSession(quit) {
 $("exit-disconnect").addEventListener("click", () => leaveSession(false));
 $("exit-quit").addEventListener("click", () => leaveSession(true));
 $("apply-quality").addEventListener("click", () => {
-  const fps = Number($("stream-fps").value), size = dimensions();
-  const bitrateKbps = $("stream-bitrate").value === "auto" ? Math.max(700, Math.min(5000, Math.floor(size.width * size.height * fps / 12000))) : Number($("stream-bitrate").value);
+  const { fps, bitrateKbps } = requestedQuality();
   send({ type: "quality", fps, bitrateKbps });
-  $("video-quality").textContent = `Requested ${fps} FPS · ${bitrateKbps} kbps`;
+  $("quality-request").textContent = `Requested ${fps} FPS · ${bitrateKbps} kbps; waiting for host.`;
 });
 function flushMotions() {
   motionFrame = undefined;
   const motions = [...pendingMotions.values()];
   pendingMotions.clear();
   motions.forEach(sendMotion);
+  if (motions.length) motionFrame = requestAnimationFrame(flushMotions);
 }
 function queueMotion(message) {
+  if (!motionFrame) {
+    sendMotion(message);
+    motionFrame = requestAnimationFrame(flushMotions);
+    return;
+  }
   const key = message.type === "move" ? "mouse" : `${message.type}:${message.id}:${message.generation}`;
   pendingMotions.set(key, message);
-  if (!motionFrame) motionFrame = requestAnimationFrame(flushMotions);
 }
 function nextGeneration(pointerId) {
   const value = nextContactGeneration(contactGenerations.get(pointerId));
@@ -570,9 +601,35 @@ function completeTrust() {
   clearInterval(trustTimer);
   trustPopup = trustOrigin = trustNonce = undefined;
   status("Host certificate accepted. You can now Connect.");
+  if (remoteLaunch) connectFromESPWake();
 }
 window.addEventListener("message", (event) => {
   if (event.source !== trustPopup || event.origin !== trustOrigin || event.data?.type !== "njk-certificate-trusted" || event.data.nonce !== trustNonce) return;
   completeTrust();
 });
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch((error) => status(`Offline installation unavailable: ${error.message}`));
+async function connectFromESPWake() {
+  if (!remoteLaunch) return;
+  try {
+    const response = await fetch(`${remoteLaunch.host}/api/connect`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ticket: remoteLaunch.ticket }),
+      cache: "no-store", signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) throw new Error(`ESP Wake connection failed (${response.status}). Open RemotePC again from ESP Wake for a fresh ticket.`);
+    const result = await response.json();
+    if (typeof result.token !== "string" || result.token.length < 32) throw new Error("Host returned an invalid connection credential.");
+    $("token").value = result.token;
+    remoteLaunch = undefined;
+    $("connection").requestSubmit();
+  } catch (error) {
+    if (isTransientNetworkError(error)) {
+      status("ESP Wake connection needs host certificate approval. Open the host security check; connection will resume after approval.");
+      openTrustPage();
+    } else {
+      remoteLaunch = undefined;
+      status(error.message);
+    }
+  }
+}
+if (remoteLaunch) connectFromESPWake();
