@@ -229,13 +229,6 @@ $("connection").addEventListener("submit", async (event) => {
     }
     if (!window.isSecureContext || !window.RTCPeerConnection) throw new Error("A secure browser with WebRTC is required.");
     await waitForViewport();
-    if (!viewerId) {
-      viewerId = sessionStorage.getItem("njk-viewer-id");
-      if (!/^[a-f0-9]{32}$/.test(viewerId || "")) {
-        viewerId = crypto.randomUUID().replaceAll("-", "");
-        sessionStorage.setItem("njk-viewer-id", viewerId);
-      }
-    }
     endpoint = hostEndpoint($("host").value);
     saveHost();
     token = $("token").value;
@@ -376,7 +369,7 @@ $("connection").addEventListener("submit", async (event) => {
     const offerEndpoint = endpoint, offerToken = token;
     const response = await fetch(offerEndpoint, {
       method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ sdp: peer.localDescription.sdp, ...dimensions(), ...requestedQuality(), clientId: viewerId }),
+      body: JSON.stringify({ sdp: peer.localDescription.sdp, ...dimensions(), ...requestedQuality(), ...(viewerId ? { clientId: viewerId } : {}) }),
       cache: "no-store", signal: AbortSignal.timeout(20000),
     });
     if (!response.ok) {
