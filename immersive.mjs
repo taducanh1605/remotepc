@@ -50,7 +50,8 @@ export function installImmersive({ send, sendMotion = send, release, screen, ava
   });
   $("soft-keyboard").addEventListener("click", () => {
     release();
-    const visible = $("remote-text").hidden;
+    const visible = $("soft-keyboard").getAttribute("aria-pressed") !== "true" ||
+      $("soft-keyboard").getAttribute("data-keyboard-retry") === "true";
     $("stream-tools").open = false;
     setKeyboard(visible);
     if (!visible) screen.focus({ preventScroll: true });

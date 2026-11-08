@@ -71,7 +71,7 @@
       </details>
     <label for="remote-text" id="remote-text-label" hidden>Remote text input</label>
     <textarea id="remote-text" hidden rows="1" inputmode="none" virtualkeyboardpolicy="manual" tabindex="-1" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Remote keyboard input" aria-describedby="remote-text-help"></textarea>
-    <p id="remote-text-help" hidden>Text is sent to the focused host control. This field opens the mobile keyboard only when the native host confirms an editable control.</p>
+    <p id="remote-text-help" hidden>Text is sent to the focused host control. Tap Keyboard to open or close the phone keyboard manually; automatic opening requires host editable-focus confirmation and browser support.</p>
       <dialog id="exit-dialog" aria-labelledby="exit-title">
         <h2 id="exit-title">Leave the stream?</h2>
         <p>Disconnect leaves the host session running. Quit closes the remote session only when no other clients are using it.</p>
@@ -111,7 +111,7 @@
         Expired access is refreshed through the launching ESPWake tab. Disconnect or Quit closes this launched tab only after the host confirms success.</p>
       <p>Host keyboard mode sends native key events for ASCII text so UniKey/Telex can run on the host; use a US host keyboard layout.
         Direct Unicode mode sends text already composed by your phone keyboard, including accents and emoji.
-        Automatic soft-keyboard requests require host editable-focus confirmation and browser support; the Keyboard menu button is always available.</p>
+        Automatic soft-keyboard requests require host editable-focus confirmation and browser support. If the phone blocks an automatic request, open the controls menu and tap Keyboard; that direct gesture retries focus and keyboard activation.</p>
       <p>Enable gamepads to use up to four standard browser-mapped controllers through the host virtual-controller driver.
         Press a controller button after connecting so the browser can expose it. Input stops on blur, hidden pages or disconnect.</p>
       <p>Native Windows touch and stylus (including pressure, tilt and eraser) are enabled only when the host advertises those capabilities.
@@ -119,6 +119,6 @@
       <p><a href="https://github.com/taducanh1605/remotepc/releases/latest" target="_blank" rel="noopener">Download Njk Host and Njk Stream releases</a></p>
     </details>
   </main>
-  <script type="module" src="./app.js?v=20261108-auth6"></script>
+  <script type="module" src="./app.js?v=20261108-keyboard7"></script>
 </body>
 </html>

@@ -11,7 +11,7 @@ import {
   viewportDimensions,
   visibleViewport,
 } from "./protocol.mjs?v=20261108-playback";
-import { installImmersive } from "./immersive.mjs?v=20261108-controls";
+import { installImmersive } from "./immersive.mjs?v=20261108-keyboard2";
 import { installGamepads } from "./gamepad.mjs?v=20261108-controls";
 import { typingMessages } from "./typing.mjs?v=20261108-controls";
 
@@ -123,23 +123,27 @@ const release = () => {
   motionFrame = undefined;
   send({ type: "release" });
 };
-function setKeyboard(visible) {
+function setKeyboard(visible, automatic = false) {
+  const changed = keyboardVisible !== visible;
   keyboardVisible = visible;
   $("remote-text").hidden = false;
   $("remote-text").inputMode = visible ? "text" : "none";
+  $("remote-text").setAttribute("virtualkeyboardpolicy", visible ? "auto" : "manual");
   $("remote-text-label").hidden = $("remote-text-help").hidden = !visible;
   $("soft-keyboard").setAttribute("aria-pressed", String(visible));
+  $("soft-keyboard").setAttribute("data-keyboard-retry", String(visible && automatic));
   if (visible) {
-    $("remote-text").focus({ preventScroll: true });
+    if (changed && document.activeElement === $("remote-text")) $("remote-text").blur();
     showKeyboard();
   } else {
     navigator.virtualKeyboard?.hide();
     $("remote-text").blur();
   }
-  function showKeyboard() {
-    try { navigator.virtualKeyboard?.show(); }
-    catch (error) { $("keyboard-status").textContent = `Browser keyboard request was limited: ${error.message}. Use the Keyboard menu button.`; }
-  }
+}
+function showKeyboard() {
+  $("remote-text").focus({ preventScroll: true });
+  try { navigator.virtualKeyboard?.show(); }
+  catch (error) { $("keyboard-status").textContent = `Browser keyboard request was limited: ${error.message}. Tap Keyboard to retry.`; }
 }
 const immersive = installImmersive({ send, sendMotion, release, screen, setKeyboard, available: () => channel?.readyState === "open" });
 const gamepads = installGamepads({ send, available: () => capabilities.gamepad && channel?.readyState === "open" && queuePosition === 0 && !document.hidden && document.hasFocus(),
@@ -277,7 +281,7 @@ $("connection").addEventListener("submit", async (event) => {
           if (message.request !== pendingFocus || !pendingFocus) return;
           pendingFocus = 0;
           $("keyboard-status").textContent = message.editable ? "Host text field focused." : "";
-          if (message.editable && activePointers.size === 0 && !keyboardVisible) setKeyboard(true);
+          if (message.editable && activePointers.size === 0 && !keyboardVisible) setKeyboard(true, true);
           if (!message.editable && !keyboardVisible) {
             $("remote-text").blur();
             screen.focus({ preventScroll: true });
@@ -591,6 +595,7 @@ screen.addEventListener("pointerdown", (event) => {
     if (!keyboardVisible) {
       $("remote-text").hidden = false;
       $("remote-text").inputMode = "none";
+      $("remote-text").setAttribute("virtualkeyboardpolicy", "manual");
       $("remote-text").focus({ preventScroll: true });
     }
     screen.setPointerCapture(event.pointerId);
