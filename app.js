@@ -32,6 +32,8 @@ let stopPromise;
 let remoteLaunch;
 let returnToESPWake = false, handoffOpener, handoffBroker, handoffNonce, handoffRefreshDeadline;
 let automaticConnection = false;
+let handoffConnecting = false, connectionStarting = false;
+let viewerId, returnInSameWindow = false;
 let automaticFullscreenPending = false;
 let focusRequest = 0, pendingFocus = 0, focusTimer;
 const contactGenerations = new Map();
@@ -49,6 +51,14 @@ function requestedQuality() {
   const fps = Number($("stream-fps").value), size = dimensions();
   const bitrateKbps = $("stream-bitrate").value === "auto" ? automaticBitrate(size.width, size.height, fps) : Number($("stream-bitrate").value);
   return { fps, bitrateKbps };
+}
+async function waitForViewport() {
+  const deadline = Date.now() + 15000;
+  while (document.hidden || viewport().width < 100 || viewport().height < 100) {
+    status("Open RemotePC in the foreground to connect at your device resolution.");
+    if (Date.now() >= deadline) throw new Error("RemotePC has no visible device viewport. Bring the app to the foreground and reconnect.");
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
 }
 async function startPlayback(enableAudio = false) {
   try {
@@ -79,6 +89,10 @@ if (launchParameters.has("ticket")) {
     $("host").value = host;
     $("connect-fullscreen").checked = true;
     remoteLaunch = { host, ticket };
+    remoteLaunch.prepared = launchParameters.get("prepared") === "1";
+    viewerId = launchParameters.get("clientId") || undefined;
+    if (viewerId && !/^[a-f0-9]{32}$/.test(viewerId)) throw new Error("Invalid remote device identity.");
+    returnInSameWindow = launchParameters.get("sameWindow") === "1";
     returnToESPWake = launchParameters.get("return") === "espwake";
     handoffNonce = launchParameters.get("nonce");
     handoffOpener = returnToESPWake && handoffNonce ? window.opener : null;
@@ -197,6 +211,8 @@ async function stopSession(notify) {
 
 $("connection").addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (connectionStarting || sessionId) return;
+  connectionStarting = true;
   const automatic = automaticConnection;
   automaticConnection = false;
   const fullscreenRequest = requestFullscreenInGesture(document.documentElement, $("connect-fullscreen").checked);
@@ -212,6 +228,14 @@ $("connection").addEventListener("submit", async (event) => {
       $("capture-status").textContent = `Fullscreen needs a screen tap: ${error.message}`;
     }
     if (!window.isSecureContext || !window.RTCPeerConnection) throw new Error("A secure browser with WebRTC is required.");
+    await waitForViewport();
+    if (!viewerId) {
+      viewerId = sessionStorage.getItem("njk-viewer-id");
+      if (!/^[a-f0-9]{32}$/.test(viewerId || "")) {
+        viewerId = crypto.randomUUID().replaceAll("-", "");
+        sessionStorage.setItem("njk-viewer-id", viewerId);
+      }
+    }
     endpoint = hostEndpoint($("host").value);
     saveHost();
     token = $("token").value;
@@ -349,9 +373,10 @@ $("connection").addEventListener("submit", async (event) => {
         check();
       });
     }
-    const response = await fetch(endpoint, {
+    const offerEndpoint = endpoint, offerToken = token;
+    const response = await fetch(offerEndpoint, {
       method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ sdp: peer.localDescription.sdp, ...dimensions(), ...requestedQuality() }),
+      body: JSON.stringify({ sdp: peer.localDescription.sdp, ...dimensions(), ...requestedQuality(), clientId: viewerId }),
       cache: "no-store", signal: AbortSignal.timeout(20000),
     });
     if (!response.ok) {
@@ -364,7 +389,12 @@ $("connection").addEventListener("submit", async (event) => {
       throw new Error(`Gateway error ${response.status}: ${details}`);
     }
     const answer = await response.json();
-    if (attempt !== generation) { peer.close(); return; }
+    if (attempt !== generation) {
+      peer.close();
+      await fetch(offerEndpoint, { method: "DELETE", headers: { Authorization: `Bearer ${offerToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ id: answer.id }), cache: "no-store", keepalive: true });
+      return;
+    }
     sessionId = answer.id;
     backend = answer.capture;
     capabilities = { touch: answer.capabilities?.touch === true, pen: answer.capabilities?.pen === true, gamepad: answer.capabilities?.gamepad === true };
@@ -418,7 +448,7 @@ $("connection").addEventListener("submit", async (event) => {
       ? "The gateway could not be reached. Check the hostname DNS result (including NXDOMAIN), network/firewall and port 47990, then verify that the TLS certificate is trusted and matches the host name. Use “Trust host certificate…” to open the browser's manual certificate screen."
       : error.message;
     status(`${detail} GitHub Pages also requires its exact origin to be allowlisted and local-network access permission.`);
-  }
+  } finally { connectionStarting = false; }
 });
 
 const exitDialog = $("exit-dialog");
@@ -434,8 +464,11 @@ async function leaveSession(quit) {
     exitDialog.close();
     await stop(false);
     if (returnToESPWake) {
-      window.close();
-      setTimeout(() => { if (!window.closed) location.replace("https://taducanh1605.github.io/espwake/"); }, 250);
+      if (returnInSameWindow) location.replace("https://taducanh1605.github.io/espwake/");
+      else {
+        window.close();
+        setTimeout(() => { if (!window.closed) location.replace("https://taducanh1605.github.io/espwake/"); }, 250);
+      }
     }
   } catch (error) { status(`Unable to ${quit ? "quit" : "disconnect"}: ${error.message}`); $("exit-error").textContent = error.message; }
   finally { for (const id of ["exit-disconnect", "exit-quit"]) $(id).disabled = false; }
@@ -703,7 +736,14 @@ window.visualViewport?.addEventListener("scroll", resized);
 navigator.virtualKeyboard?.addEventListener("geometrychange", resized);
 window.addEventListener("resize", resized);
 document.addEventListener("fullscreenchange", () => { release(); if (!document.fullscreenElement) navigator.keyboard?.unlock(); resized(); });
-window.addEventListener("pagehide", () => stop());
+window.addEventListener("pagehide", () => {
+  if (endpoint && token && sessionId) {
+    fetch(endpoint, { method: "DELETE", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ id: sessionId }), cache: "no-store", keepalive: true })
+      .catch(error => console.warn("Session departure could not be sent:", error.message));
+  }
+  stop(false);
+});
 window.addEventListener("beforeunload", event => {
   if (!sessionId) return;
   event.preventDefault();
@@ -745,14 +785,15 @@ window.addEventListener("message", (event) => {
 });
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch((error) => status(`Offline installation unavailable: ${error.message}`));
 async function connectFromESPWake() {
-  if (!remoteLaunch) return;
+  if (!remoteLaunch || handoffConnecting) return;
+  handoffConnecting = true;
   try {
     const response = await fetch(`${remoteLaunch.host}/api/connect`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ticket: remoteLaunch.ticket }),
       cache: "no-store", signal: AbortSignal.timeout(10000),
     });
-    if (response.status === 401 && (handoffOpener || handoffBroker)) {
+    if (response.status === 401 && !remoteLaunch.prepared && (handoffOpener || handoffBroker)) {
       handoffRefreshDeadline ||= Date.now() + 90000;
       if (Date.now() >= handoffRefreshDeadline) throw new Error("Remote access could not refresh within 90 seconds. Check the Windows helper and gateway.");
       status("Access expired. Getting a fresh ticket from ESPWake…");
@@ -799,6 +840,7 @@ async function connectFromESPWake() {
       if (data.host !== remoteLaunch.host || !/^[a-f0-9]{32}$/.test(data.ticket || "")) throw new Error("ESPWake returned an invalid replacement ticket.");
       remoteLaunch.ticket = data.ticket;
       await new Promise(resolve => setTimeout(resolve, 2500));
+      handoffConnecting = false;
       return connectFromESPWake();
     }
     if (!response.ok) throw new Error(`Host authorization failed (${response.status}). ${await response.text()}`);
@@ -826,6 +868,6 @@ async function connectFromESPWake() {
       $("handoff-recovery").hidden = !returnToESPWake;
       status(error.message);
     }
-  }
+  } finally { handoffConnecting = false; }
 }
 if (remoteLaunch) connectFromESPWake();
