@@ -10,7 +10,7 @@ export function lockedPointer(position, dx, dy, width, height) {
     y: Math.max(0, Math.min(1, position.y + dy / Math.max(1, height))) };
 }
 
-export function installImmersive({ send, sendMotion = send, release, screen, available }) {
+export function installImmersive({ send, sendMotion = send, release, screen, available, setKeyboard }) {
   const $ = id => document.getElementById(id);
   const shell = $("stream-shell");
   let pointer = { x: .5, y: .5 };
@@ -26,7 +26,7 @@ export function installImmersive({ send, sendMotion = send, release, screen, ava
   async function enter() {
     if (!available()) return;
     try {
-      await shell.requestFullscreen();
+      if (!document.fullscreenElement) await shell.requestFullscreen();
       document.body.classList.add("immersive");
       screen.focus();
       if (navigator.keyboard?.lock) {
@@ -50,10 +50,10 @@ export function installImmersive({ send, sendMotion = send, release, screen, ava
   });
   $("soft-keyboard").addEventListener("click", () => {
     release();
-    const text = $("remote-text"), visible = text.hidden;
-    text.hidden = $("remote-text-label").hidden = $("remote-text-help").hidden = !visible;
-    $("soft-keyboard").setAttribute("aria-pressed",String(visible));
-    if (visible) text.focus(); else screen.focus();
+    const visible = $("remote-text").hidden;
+    $("stream-tools").open = false;
+    setKeyboard(visible);
+    if (!visible) screen.focus({ preventScroll: true });
   });
   $("right-click").addEventListener("click", () => {
     send({ type:"button",button:2,down:true }); send({ type:"button",button:2,down:false });
@@ -85,5 +85,5 @@ export function installImmersive({ send, sendMotion = send, release, screen, ava
   window.addEventListener("blur",release);
   document.addEventListener("visibilitychange",()=>{ if(document.hidden)release(); });
   return { exit, connected:()=>{ $("stream-tools").hidden=false; },
-    disconnected:()=>{ $("stream-tools").hidden=true; $("zoom").value=1; screen.style.transform=""; exit(); } };
+    disconnected:async()=>{ $("stream-tools").hidden=true; $("stream-tools").open=false; $("zoom").value=1; $("zoom-level").value="1×"; screen.style.transform=""; await exit(); } };
 }

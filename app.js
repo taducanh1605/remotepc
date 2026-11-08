@@ -12,7 +12,7 @@ import { installImmersive } from "./immersive.mjs";
 
 const $ = (id) => document.getElementById(id);
 const screen = $("screen");
-let pc, channel, motionChannel, endpoint, token, sessionId, resizeTimer, motionFrame, pendingInstall, statsTimer, latencyTimer;
+let pc, channel, motionChannel, endpoint, token, sessionId, resizeTimer, motionFrame, statsTimer, latencyTimer;
 let generation = 0;
 let backend = "standalone";
 let queuePosition = 0;
@@ -20,6 +20,8 @@ let displayLeader = false;
 let capabilities = { touch: false, pen: false };
 let composingText = false;
 let committedComposition;
+let keyboardVisible = false;
+let lastDimensions;
 let micChannel, micStream, micContext, trustPopup, trustOrigin;
 const contactGenerations = new Map();
 const activePointers = new Map();
@@ -29,7 +31,7 @@ const latencySamples = [];
 let pingSequence = 0;
 let lastRttAt = 0;
 let motionSequence = 0;
-const status = (text) => { $("status").textContent = text; };
+const status = (text) => { $("status").textContent = $("stream-status").textContent = text; };
 const dimensions = () => viewportDimensions(window.visualViewport || { width: innerWidth, height: innerHeight }, devicePixelRatio);
 const send = (message) => {
   if (channel?.readyState !== "open") return;
@@ -52,7 +54,14 @@ const release = () => {
   motionFrame = undefined;
   send({ type: "release" });
 };
-const immersive = installImmersive({ send, sendMotion, release, screen, available: () => channel?.readyState === "open" });
+function setKeyboard(visible) {
+  keyboardVisible = visible;
+  $("remote-text").hidden = $("remote-text-label").hidden = $("remote-text-help").hidden = !visible;
+  $("soft-keyboard").setAttribute("aria-pressed", String(visible));
+  if (visible) $("remote-text").focus({ preventScroll: true });
+  else $("remote-text").blur();
+}
+const immersive = installImmersive({ send, sendMotion, release, screen, setKeyboard, available: () => channel?.readyState === "open" });
 
 async function stop(notify = true) {
   ++generation;
@@ -60,7 +69,8 @@ async function stop(notify = true) {
   clearInterval(statsTimer);
   clearInterval(latencyTimer);
   release();
-  immersive.disconnected();
+  setKeyboard(false);
+  await immersive.disconnected();
   channel?.close();
   motionChannel?.close();
   await stopMicrophone();
@@ -68,7 +78,14 @@ async function stop(notify = true) {
   pc?.close();
   channel = motionChannel = pc = undefined;
   screen.srcObject = null;
-  $("remote-text").hidden = $("remote-text-label").hidden = $("remote-text-help").hidden = true;
+  $("stream-shell").hidden = true;
+  document.body.classList.remove("streaming");
+  document.documentElement.style.removeProperty("--viewport-height");
+  document.documentElement.style.removeProperty("--viewport-top");
+  lastDimensions = undefined;
+  composingText = false;
+  committedComposition = undefined;
+  $("remote-text").value = "";
   navigator.keyboard?.unlock();
   $("connection").hidden = false;
   $("connect").disabled = false;
@@ -124,8 +141,7 @@ $("connection").addEventListener("submit", async (event) => {
         }
         if (message.type === "leadership") displayLeader = message.leader === true;
         if (message.type === "text-focus" && typeof message.editable === "boolean") {
-          $("remote-text").hidden = $("remote-text-label").hidden = $("remote-text-help").hidden = !message.editable;
-          if (message.editable && activePointers.size === 0) $("remote-text").focus();
+          if (message.editable && activePointers.size === 0 && !keyboardVisible) setKeyboard(true);
         }
         if (message.success === false) status(`Host ${message.type} failed.`);
       } catch { /* Ignore messages outside the negotiated JSON control protocol. */ }
@@ -211,19 +227,23 @@ $("connection").addEventListener("submit", async (event) => {
     $("microphone").disabled = !answer.microphone;
     await peer.setRemoteDescription({ type: "answer", sdp: answer.sdp });
     $("connection").hidden = true;
+    $("stream-shell").hidden = false;
+    document.body.classList.add("streaming");
+    resized();
     immersive.connected();
     $("disconnect").disabled = $("fullscreen").disabled = false;
     status("WebRTC negotiated. Waiting for actual video frames…");
     statsTimer = setInterval(async () => {
       if (pc !== peer) return;
       const stats = await peer.getStats();
+      if (pc !== peer) return;
       let decoded = 0;
       for (const report of stats.values()) {
         if (report.type === "inbound-rtp" && report.kind === "video") decoded += report.framesDecoded || 0;
       }
       if (decoded > 0 && queuePosition === 0) status(`Streaming · ${screen.videoWidth}×${screen.videoHeight} · ${decoded} decoded frames · ${backend === "native-host" ? (displayLeader ? "display leader" : "shared display follower") : "standalone"}`);
     }, 2000);
-    screen.focus();
+    if (!keyboardVisible) screen.focus({ preventScroll: true });
   } catch (error) {
     if (attempt !== generation) return;
     await stop();
@@ -331,7 +351,7 @@ screen.addEventListener("contextmenu", (event) => event.preventDefault());
 screen.addEventListener("pointerdown", (event) => {
   if (event.pointerType === "touch" && backend === "native-host") {
     if (!capabilities.touch) return;
-    screen.focus();
+    if (!keyboardVisible) screen.focus({ preventScroll: true });
     screen.setPointerCapture(event.pointerId);
     beginPointer(event, "touch");
     event.preventDefault();
@@ -339,7 +359,7 @@ screen.addEventListener("pointerdown", (event) => {
   }
   if (event.pointerType === "pen" && backend === "native-host") {
     if (!capabilities.pen) return;
-    screen.focus();
+    if (!keyboardVisible) screen.focus({ preventScroll: true });
     screen.setPointerCapture(event.pointerId);
     beginPointer(event, "pen");
     event.preventDefault();
@@ -353,7 +373,7 @@ screen.addEventListener("pointerdown", (event) => {
   }
   const position = pointerPosition(event, screen);
   if (!position) return;
-  screen.focus();
+  if (!keyboardVisible) screen.focus({ preventScroll: true });
   screen.setPointerCapture(event.pointerId);
   send({ type: "move", ...position });
   send({ type: "button", button: event.button, down: true });
@@ -426,33 +446,23 @@ $("remote-text").addEventListener("compositionend", (event) => {
 $("remote-text").addEventListener("input", () => { if (!composingText) $("remote-text").value = ""; });
 $("remote-text").addEventListener("blur", release);
 const resized = () => {
+  const viewport = window.visualViewport;
+  document.documentElement.style.setProperty("--viewport-height", `${viewport?.height || innerHeight}px`);
+  document.documentElement.style.setProperty("--viewport-top", `${viewport?.offsetTop || 0}px`);
   clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => send({ type: "resize", ...dimensions() }), 500);
+  resizeTimer = setTimeout(() => {
+    const next = dimensions();
+    if (next.width === lastDimensions?.width && next.height === lastDimensions?.height) return;
+    if (channel?.readyState !== "open") return;
+    lastDimensions = next;
+    send({ type: "resize", ...next });
+  }, 120);
 };
 window.visualViewport?.addEventListener("resize", resized);
+window.visualViewport?.addEventListener("scroll", resized);
 window.addEventListener("resize", resized);
 document.addEventListener("fullscreenchange", () => { release(); if (!document.fullscreenElement) navigator.keyboard?.unlock(); resized(); });
 window.addEventListener("pagehide", () => stop());
-window.addEventListener("beforeinstallprompt", (event) => { event.preventDefault(); pendingInstall = event; $("install").textContent = "Install app"; });
-async function installApp() {
-  if (!pendingInstall) {
-    const appleTouch = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
-      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-    const platform = appleTouch ? "iOS/iPadOS: tap Share, then “Add to Home Screen”."
-      : /android/i.test(navigator.userAgent) ? "Android: open the browser menu and choose “Install app” or “Add to Home screen”."
-      : "Open your browser's install or “Create shortcut” menu to add Njk Stream.";
-    status(`Install instructions — ${platform}`);
-    return;
-  }
-  try { await pendingInstall.prompt(); }
-  catch (error) { status(`Install prompt unavailable: ${error.message}`); }
-  finally {
-    pendingInstall = undefined;
-    $("install").textContent = "Install / add to home screen";
-  }
-}
-$("install").addEventListener("click", installApp);
-$("install-stream").addEventListener("click", installApp);
 function openTrustPage() {
   try {
     const origin = new URL(hostEndpoint($("host").value)).origin;

@@ -22,7 +22,7 @@ export function pointerPosition(event, video) {
   const width = Math.min(rect.width, rect.height * aspect);
   const height = width / aspect;
   const x = (event.clientX - rect.left - (rect.width - width) / 2) / width;
-  const y = (event.clientY - rect.top - (rect.height - height) / 2) / height;
+  const y = (event.clientY - rect.top) / height;
   if (x < 0 || x > 1 || y < 0 || y > 1) return null;
   return { x, y };
 }
