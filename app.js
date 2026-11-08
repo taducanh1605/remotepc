@@ -41,7 +41,7 @@ let lastRttAt = 0;
 let motionSequence = 0;
 const status = (text) => { $("status").textContent = $("stream-status").textContent = text; };
 const viewport = () => visibleViewport(window.visualViewport, { width: innerWidth, height: innerHeight }, navigator.virtualKeyboard?.boundingRect);
-const dimensions = () => viewportDimensions(viewport(), 1);
+const dimensions = () => viewportDimensions(viewport(), $("stream-detail").value === "auto" ? window.devicePixelRatio || 1 : Number($("stream-detail").value));
 function requestedQuality() {
   const fps = Number($("stream-fps").value), size = dimensions();
   const bitrateKbps = $("stream-bitrate").value === "auto" ? automaticBitrate(size.width, size.height, fps) : Number($("stream-bitrate").value);
@@ -385,6 +385,7 @@ async function leaveSession(quit) {
 $("exit-disconnect").addEventListener("click", () => leaveSession(false));
 $("exit-quit").addEventListener("click", () => leaveSession(true));
 $("apply-quality").addEventListener("click", () => {
+  resized();
   const { fps, bitrateKbps } = requestedQuality();
   send({ type: "quality", fps, bitrateKbps });
   $("quality-request").textContent = `Requested ${fps} FPS · ${bitrateKbps} kbps; waiting for host.`;

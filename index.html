@@ -37,6 +37,8 @@
         <output id="playback-status" role="status" aria-live="polite"></output>
         <label for="stream-fps">Frame rate</label>
         <select id="stream-fps"><option value="60">60 FPS</option><option value="30">30 FPS (data saver)</option></select>
+        <label for="stream-detail">Desktop detail</label>
+        <select id="stream-detail"><option value="auto">Match device pixels (up to 2×)</option><option value="1">Standard (1×)</option><option value="2">High detail (2×)</option></select>
         <label for="stream-bitrate">Bitrate limit</label>
         <select id="stream-bitrate"><option value="auto">Automatic (high quality)</option><option value="1000">1 Mbps</option><option value="2000">2 Mbps</option><option value="4000">4 Mbps</option><option value="8000">8 Mbps</option><option value="12000">12 Mbps</option><option value="20000">20 Mbps</option></select>
         <button id="apply-quality" disabled>Apply quality</button>
@@ -95,6 +97,9 @@
         Remote Win, Alt+Tab and Esc buttons inject supported host keys; Ctrl+Alt+Delete is not offered because this host cannot inject the secure sequence.
         The local magnifier changes only your view, not host resolution. Streaming defaults to 60 FPS; 30 FPS is an explicit data-saver option.
         Quality requests and actual encoder application are reported separately.</p>
+      <p>Desktop detail matches the device pixel density up to 2×, bounded to 3840×2160.
+        Higher detail provides sharper text but more desktop space and uses more bandwidth.
+        Select Standard (1×) if host controls appear too small; the local magnifier can enlarge your view.</p>
       <p>The monitor button in ESP Wake can connect automatically using a short-lived, single-use ticket.
         The ticket is removed from browser history before connection; host credentials are not stored on the ESP32 or in browser storage.</p>
       <p>Native Windows touch and stylus (including pressure, tilt and eraser) are enabled only when the host advertises those capabilities.
@@ -102,6 +107,6 @@
       <p><a href="https://github.com/taducanh1605/remotepc/releases/latest" target="_blank" rel="noopener">Download Njk Host and Njk Stream releases</a></p>
     </details>
   </main>
-  <script type="module" src="./app.js?v=20261108-playback"></script>
+  <script type="module" src="./app.js?v=20261108-playback2"></script>
 </body>
 </html>
