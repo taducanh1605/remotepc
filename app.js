@@ -217,6 +217,7 @@ $("connection").addEventListener("submit", async (event) => {
     status("Negotiating authenticated WebRTC…");
     const peer = new RTCPeerConnection();
     let disconnectTimer;
+    let captureFailure = "";
     pc = peer;
     const video = peer.addTransceiver("video", { direction: "recvonly" });
     const h264 = RTCRtpReceiver.getCapabilities("video")?.codecs.filter((codec) => codec.mimeType.toLowerCase() === "video/h264");
@@ -261,9 +262,16 @@ $("connection").addEventListener("submit", async (event) => {
             $("remote-text").blur();
             screen.focus({ preventScroll: true });
           }
-          if (message.type === "gamepad") $("gamepad-status").textContent = message.success === false
-            ? "Host could not allocate the virtual gamepad. Check the installed controller driver."
-            : "Native gamepad connected.";
+        }
+        if (message.type === "gamepad") $("gamepad-status").textContent = message.success === false
+          ? "Host could not allocate the virtual gamepad. Check the installed controller driver."
+          : "Native gamepad connected.";
+        if (message.success === false && ["capture-failed", "started"].includes(message.type)) {
+          captureFailure = message.reason === "bridge-disconnected"
+            ? "Native Host bridge disconnected. Reconnect after the service is ready."
+            : "Native capture failed. Check the Host virtual display and encoder before reconnecting.";
+          status(captureFailure);
+          return;
         }
         if (message.success === false) status(`Host ${message.type} failed.`);
       } catch { /* Ignore messages outside the negotiated JSON control protocol. */ }
@@ -300,10 +308,18 @@ $("connection").addEventListener("submit", async (event) => {
         $("latency").textContent = `Control RTT: ${median} ms median`;
       } catch { /* Ignore messages outside the motion protocol. */ }
     });
-    peer.addEventListener("track", ({ track }) => {
+    peer.addEventListener("track", ({ track, receiver, streams }) => {
       if (pc !== peer) return;
-      const stream = screen.srcObject || new MediaStream();
-      stream.addTrack(track);
+      for (const property of ["jitterBufferTarget", "playoutDelayHint"]) {
+        if (!(property in receiver)) continue;
+        try { receiver[property] = 0; }
+        catch (error) {
+          console.warn(`Could not set ${track.kind} ${property}:`, error);
+          $("capture-status").textContent = `Browser limited low-buffer ${track.kind} playback: ${error.message}`;
+        }
+      }
+      const stream = screen.srcObject || streams[0] || new MediaStream();
+      if (!stream.getTracks().includes(track)) stream.addTrack(track);
       screen.srcObject = stream;
       startPlayback();
     });
@@ -316,7 +332,7 @@ $("connection").addEventListener("submit", async (event) => {
           if (pc === peer && peer.connectionState === "disconnected") stop().then(() => status("Network did not recover. Reconnect when the host is reachable."));
         }, 10000);
       } else if (["failed", "closed"].includes(peer.connectionState)) {
-        stop().then(() => status("Connection lost. Check host DNS, network/firewall, trusted TLS certificate, and UDP/ICE or TURN configuration."));
+        stop().then(() => status(captureFailure || "Connection lost. Check host DNS, network/firewall, trusted TLS certificate, and UDP/ICE or TURN configuration."));
       }
     });
     await peer.setLocalDescription(await peer.createOffer());
@@ -522,7 +538,7 @@ $("desktop-audio").addEventListener("click", () => {
 });
 screen.addEventListener("keydown", (event) => {
   if (event.code === "Escape") { release(); return; }
-  if (!event.repeat) send({ type: "key", code: event.code, down: true });
+  send({ type: "key", code: event.code, down: true, ...(event.repeat ? { repeat: true } : {}) });
   event.preventDefault();
 });
 screen.addEventListener("keyup", (event) => {
@@ -657,7 +673,7 @@ $("remote-text").addEventListener("input", () => {
 });
 $("remote-text").addEventListener("keydown", event => {
   if (event.isComposing || event.key === "Unidentified" || !event.code || event.key === "Process") return;
-  send({ type: "key", code: event.code, down: true });
+  send({ type: "key", code: event.code, down: true, ...(event.repeat ? { repeat: true } : {}) });
   event.preventDefault();
 });
 $("remote-text").addEventListener("keyup", event => {
