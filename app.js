@@ -1,4 +1,5 @@
 import { hostEndpoint, viewportDimensions, pointerPosition } from "./protocol.mjs";
+import { installImmersive } from "./immersive.mjs";
 
 const $ = (id) => document.getElementById(id);
 const screen = $("screen");
@@ -16,12 +17,14 @@ const send = (message) => {
   if (channel?.readyState === "open" && channel.bufferedAmount < 65536) channel.send(JSON.stringify(message));
 };
 const release = () => send({ type: "release" });
+const immersive = installImmersive({ send, release, screen, available: () => channel?.readyState === "open" });
 
 async function stop(notify = true) {
   ++generation;
   clearTimeout(resizeTimer);
   clearInterval(statsTimer);
   release();
+  immersive.disconnected();
   channel?.close();
   await stopMicrophone();
   micChannel?.close();
@@ -69,7 +72,7 @@ $("connection").addEventListener("submit", async (event) => {
         const message = JSON.parse(event.data);
         if (message.type === "queue") {
           queuePosition = message.position;
-          status(message.active ? "Your browser session is active; waiting for video frames…" : `Queued: ${message.position} browser session(s) ahead.`);
+          status(message.active ? "Your browser controls the stream; waiting for video frames…" : `Watching the shared stream; ${message.position} browser session(s) ahead for control.`);
         }
         if (message.type === "leadership") displayLeader = message.leader === true;
         if (message.type === "text-focus" && typeof message.editable === "boolean") {
@@ -116,6 +119,7 @@ $("connection").addEventListener("submit", async (event) => {
     $("microphone").disabled = !answer.microphone;
     await peer.setRemoteDescription({ type: "answer", sdp: answer.sdp });
     $("connection").hidden = true;
+    immersive.connected();
     $("disconnect").disabled = $("fullscreen").disabled = false;
     status("WebRTC negotiated. Waiting for actual video frames…");
     statsTimer = setInterval(async () => {
@@ -171,13 +175,6 @@ $("microphone").addEventListener("click", async () => {
   } catch (error) { await stopMicrophone(); status(`Microphone unavailable: ${error.message}`); }
   finally { if (pc && backend === "native-host") $("microphone").disabled = false; }
 });
-$("fullscreen").addEventListener("click", async () => {
-  try {
-    await screen.requestFullscreen();
-    await navigator.keyboard?.lock();
-    screen.focus();
-  } catch (error) { status(`Fullscreen/keyboard lock unavailable: ${error.message}. Browser shortcuts remain reserved.`); }
-});
 screen.addEventListener("click", () => screen.play().catch(() => {}));
 screen.addEventListener("keydown", (event) => {
   if (event.code === "Escape") { release(); return; }
@@ -194,6 +191,11 @@ document.addEventListener("visibilitychange", () => { if (document.hidden) relea
 screen.addEventListener("contextmenu", (event) => event.preventDefault());
 screen.addEventListener("pointerdown", (event) => {
   if (!event.isPrimary) return;
+  if (document.pointerLockElement === screen) {
+    send({ type: "button", button: event.button, down: true });
+    event.preventDefault();
+    return;
+  }
   const position = pointerPosition(event, screen);
   if (!position) return;
   screen.focus();
@@ -203,6 +205,7 @@ screen.addEventListener("pointerdown", (event) => {
   event.preventDefault();
 });
 screen.addEventListener("pointermove", (event) => {
+  if (document.pointerLockElement === screen) return;
   if (!event.isPrimary) return;
   const position = pointerPosition(event, screen);
   if (position) send({ type: "move", ...position });
@@ -240,6 +243,7 @@ $("remote-text").addEventListener("compositionend", (event) => {
   setTimeout(() => { committedComposition = undefined; $("remote-text").value = ""; }, 0);
 });
 $("remote-text").addEventListener("input", () => { if (!composingText) $("remote-text").value = ""; });
+$("remote-text").addEventListener("blur", release);
 const resized = () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => send({ type: "resize", ...dimensions() }), 500);

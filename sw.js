@@ -1,5 +1,5 @@
-const CACHE = "njk-browser-v1";
-const FILES = ["./", "./index.html", "./style.css", "./app.js", "./protocol.mjs", "./manifest.webmanifest", "./icon.svg", "./microphone-worklet.js"];
+const CACHE = "njk-browser-v2";
+const FILES = ["./", "./index.html", "./style.css", "./app.js", "./immersive.mjs", "./protocol.mjs", "./manifest.webmanifest", "./icon.svg", "./microphone-worklet.js"];
 const urls = new Set(FILES.map((path) => new URL(path, self.registration.scope).href));
 self.addEventListener("install", (event) => event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(FILES))));
 self.addEventListener("activate", (event) => event.waitUntil(
