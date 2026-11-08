@@ -10,7 +10,7 @@ export function lockedPointer(position, dx, dy, width, height) {
     y: Math.max(0, Math.min(1, position.y + dy / Math.max(1, height))) };
 }
 
-export function installImmersive({ send, release, screen, available }) {
+export function installImmersive({ send, sendMotion = send, release, screen, available }) {
   const $ = id => document.getElementById(id);
   const shell = $("stream-shell");
   let pointer = { x: .5, y: .5 };
@@ -46,7 +46,7 @@ export function installImmersive({ send, release, screen, available }) {
   screen.addEventListener("pointermove", event => {
     if (document.pointerLockElement !== screen) return;
     pointer = lockedPointer(pointer,event.movementX,event.movementY,screen.clientWidth,screen.clientHeight);
-    send({ type: "move", ...pointer });
+    sendMotion({ type: "move", ...pointer });
   });
   $("soft-keyboard").addEventListener("click", () => {
     release();

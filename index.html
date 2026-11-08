@@ -13,23 +13,27 @@
 <body>
   <header>
     <h1>Njk Stream</h1>
-    <button id="install" hidden>Install app</button>
-    <button id="fullscreen" disabled>Enter immersive mode</button>
-    <button id="disconnect" disabled>Disconnect</button>
-    <button id="microphone" disabled aria-pressed="false">Enable microphone</button>
+    <button id="install" type="button">Install / add to home screen</button>
   </header>
   <main>
     <form id="connection">
       <label for="host">Browser gateway HTTPS address (default port 47990)</label>
       <input id="host" type="url" placeholder="https://host.example:47990" required autocomplete="url">
+      <button id="trust-host" type="button">Trust host certificate…</button>
       <label for="token">Access token</label>
       <input id="token" type="password" required minlength="32" autocomplete="off" spellcheck="false">
+      <label class="check-option"><input id="connect-fullscreen" type="checkbox"> Enter fullscreen before connecting</label>
       <button type="submit" id="connect">Connect</button>
     </form>
     <p id="status" role="status" aria-live="polite">Disconnected. Use a trusted HTTPS certificate on your host.</p>
     <section id="stream-shell" aria-label="Remote stream">
       <video id="screen" autoplay playsinline tabindex="0" aria-label="Remote desktop. Focus to send keyboard input."></video>
-      <nav id="stream-tools" aria-label="Remote controls" hidden>
+      <details id="stream-tools" hidden>
+        <summary>Remote controls</summary>
+        <nav class="stream-menu-controls" aria-label="Remote controls">
+        <button id="fullscreen" disabled>Enter immersive mode</button>
+        <button id="disconnect" disabled>Disconnect</button>
+        <button id="microphone" disabled aria-pressed="false">Enable microphone</button>
         <button id="exit-immersive">Exit immersive</button>
         <button id="pointer-lock">Lock mouse</button>
         <button id="soft-keyboard" aria-pressed="false">Keyboard</button>
@@ -42,7 +46,10 @@
         <label for="zoom">Local magnifier</label>
         <input id="zoom" type="range" min="1" max="3" step="0.25" value="1">
         <output id="zoom-level" for="zoom">1×</output>
-      </nav>
+        <output id="latency" aria-live="polite">Control RTT: measuring…</output>
+        <p id="input-capabilities" role="status" aria-live="polite">Waiting for host input capabilities.</p>
+        </nav>
+      </details>
       <p id="capture-status" role="status" aria-live="polite">Input capture off</p>
     <label for="remote-text" id="remote-text-label" hidden>Remote text input</label>
     <textarea id="remote-text" hidden rows="1" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="remote-text-help"></textarea>
@@ -50,11 +57,14 @@
     </section>
     <details>
       <summary>Controls, permissions and limitations</summary>
-      <p>Focus the video to send keys. Touch acts as a single mouse pointer; the toolbar provides right click, scroll and manual keyboard.
+      <p>Focus the video to send keys. Native hosts that advertise support receive independent multitouch contacts and stylus pressure, tilt and eraser input.
+        Standalone capture uses mouse input. The floating menu provides right click, scroll, microphone and manual keyboard controls.
         Fullscreen and keyboard lock are best-effort: browser/OS shortcuts, secure desktops and Ctrl+Alt+Delete cannot be captured.
         Press Escape to leave fullscreen. Standalone resize changes encoded video only; the native backend can change host display mode subject to ownership.</p>
       <p>GitHub Pages serves this app only. The host runs the separate TLS WebRTC gateway. Allow your browser's local-network
         permission if prompted. A trusted host certificate and reachable UDP ICE path (or your own TURN server) are required.</p>
+      <p>Trust host certificate opens the gateway's HTTPS page in a separate window. Any browser certificate warning must be accepted manually;
+        the app never bypasses TLS verification. The page signals completion only to this allowlisted PWA origin.</p>
       <p>Microphone is opt-in, requires browser permission, and is available only when the native host advertises a configured virtual-cable sink.
         It is never enabled automatically. Standalone desktop sound requires a configured Windows system-audio loopback device, not a microphone.</p>
       <p>The standalone fallback captures the Windows virtual desktop with FFmpeg, separately from Njk Host's native sessions;
@@ -65,6 +75,8 @@
         Android navigation/back gestures, Windows shortcuts and secure Ctrl+Alt+Delete cannot universally be intercepted.
         Remote Win, Alt+Tab and Esc buttons inject supported host keys; Ctrl+Alt+Delete is not offered because this host cannot inject the secure sequence.
         The local magnifier changes only your view, not host resolution. FPS and bitrate are host-configured; no unimplemented quality settings are shown.</p>
+      <p>Native Windows touch and stylus (including pressure, tilt and eraser) are enabled only when the host advertises those capabilities.
+        The displayed control RTT measures the motion data channel round trip to the gateway; it is not end-to-end video/display latency.</p>
       <p><a href="https://github.com/taducanh1605/remotepc/releases/latest" target="_blank" rel="noopener">Download Njk Host and Njk Stream releases</a></p>
     </details>
   </main>

@@ -1,35 +1,64 @@
-import { hostEndpoint, viewportDimensions, pointerPosition } from "./protocol.mjs";
+import {
+  coalescedPointerEvent,
+  hostEndpoint,
+  isTransientNetworkError,
+  nextContactGeneration,
+  pointerControl,
+  pointerPosition,
+  requestFullscreenInGesture,
+  viewportDimensions,
+} from "./protocol.mjs";
 import { installImmersive } from "./immersive.mjs";
 
 const $ = (id) => document.getElementById(id);
 const screen = $("screen");
-let pc, channel, endpoint, token, sessionId, resizeTimer, pendingInstall, statsTimer;
+let pc, channel, motionChannel, endpoint, token, sessionId, resizeTimer, motionFrame, pendingInstall, statsTimer, latencyTimer;
 let generation = 0;
 let backend = "standalone";
 let queuePosition = 0;
 let displayLeader = false;
+let capabilities = { touch: false, pen: false };
 let composingText = false;
 let committedComposition;
-let micChannel, micStream, micContext;
+let micChannel, micStream, micContext, trustPopup, trustOrigin;
+const contactGenerations = new Map();
+const activePointers = new Map();
+const pendingMotions = new Map();
+const pendingPings = new Map();
+const latencySamples = [];
+let pingSequence = 0;
+let lastRttAt = 0;
 const status = (text) => { $("status").textContent = text; };
 const dimensions = () => viewportDimensions(window.visualViewport || { width: innerWidth, height: innerHeight }, devicePixelRatio);
 const send = (message) => {
   if (channel?.readyState === "open" && channel.bufferedAmount < 65536) channel.send(JSON.stringify(message));
 };
-const release = () => send({ type: "release" });
-const immersive = installImmersive({ send, release, screen, available: () => channel?.readyState === "open" });
+const sendMotion = (message) => {
+  if (motionChannel?.readyState === "open" && motionChannel.bufferedAmount < 16384) motionChannel.send(JSON.stringify(message));
+};
+const release = () => {
+  for (const contact of activePointers.values()) send({ ...contact, phase: "cancel" });
+  activePointers.clear();
+  pendingMotions.clear();
+  if (motionFrame) cancelAnimationFrame(motionFrame);
+  motionFrame = undefined;
+  send({ type: "release" });
+};
+const immersive = installImmersive({ send, sendMotion, release, screen, available: () => channel?.readyState === "open" });
 
 async function stop(notify = true) {
   ++generation;
   clearTimeout(resizeTimer);
   clearInterval(statsTimer);
+  clearInterval(latencyTimer);
   release();
   immersive.disconnected();
   channel?.close();
+  motionChannel?.close();
   await stopMicrophone();
   micChannel?.close();
   pc?.close();
-  channel = pc = undefined;
+  channel = motionChannel = pc = undefined;
   screen.srcObject = null;
   $("remote-text").hidden = $("remote-text-label").hidden = $("remote-text-help").hidden = true;
   navigator.keyboard?.unlock();
@@ -37,6 +66,14 @@ async function stop(notify = true) {
   $("connect").disabled = false;
   $("disconnect").disabled = $("fullscreen").disabled = true;
   $("microphone").disabled = true;
+  $("latency").textContent = "Control RTT: measuring…";
+  capabilities = { touch: false, pen: false };
+  queuePosition = 0;
+  displayLeader = false;
+  contactGenerations.clear();
+  pendingPings.clear();
+  latencySamples.length = 0;
+  lastRttAt = 0;
   const oldEndpoint = endpoint, oldToken = token, oldId = sessionId;
   endpoint = token = sessionId = undefined;
   if (notify && oldEndpoint && oldToken && oldId) {
@@ -48,9 +85,11 @@ async function stop(notify = true) {
 
 $("connection").addEventListener("submit", async (event) => {
   event.preventDefault();
+  const fullscreenRequest = requestFullscreenInGesture(document.documentElement, $("connect-fullscreen").checked);
   $("connect").disabled = true;
   const attempt = ++generation;
   try {
+    await fullscreenRequest;
     if (!window.isSecureContext || !window.RTCPeerConnection) throw new Error("A secure browser with WebRTC is required.");
     endpoint = hostEndpoint($("host").value);
     token = $("token").value;
@@ -65,6 +104,7 @@ $("connection").addEventListener("submit", async (event) => {
     video.setCodecPreferences(h264);
     peer.addTransceiver("audio", { direction: "recvonly" });
     channel = peer.createDataChannel("input", { ordered: true });
+    motionChannel = peer.createDataChannel("motion", { ordered: false, maxRetransmits: 0 });
     micChannel = peer.createDataChannel("microphone", { ordered: false, maxRetransmits: 0 });
     channel.addEventListener("open", () => send({ type: "resize", ...dimensions() }));
     channel.addEventListener("message", (event) => {
@@ -82,6 +122,38 @@ $("connection").addEventListener("submit", async (event) => {
         if (message.success === false) status(`Host ${message.type} failed.`);
       } catch { /* Ignore messages outside the negotiated JSON control protocol. */ }
     });
+    motionChannel.addEventListener("open", () => {
+      clearInterval(latencyTimer);
+      latencyTimer = setInterval(() => {
+        const now = performance.now();
+        for (const [sequence, started] of pendingPings) {
+          if (now - started > 5000) pendingPings.delete(sequence);
+        }
+        if (queuePosition !== 0) {
+          $("latency").textContent = "Control RTT: waiting for control turn";
+          return;
+        }
+        if (lastRttAt && now - lastRttAt > 5000) $("latency").textContent = "Control RTT: no recent reply";
+        if (motionChannel?.readyState !== "open" || pendingPings.size >= 2) return;
+        const sequence = ++pingSequence;
+        pendingPings.set(sequence, now);
+        sendMotion({ type: "latency-ping", sequence });
+      }, 2000);
+    });
+    motionChannel.addEventListener("message", (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message.type !== "latency-pong" || !pendingPings.has(message.sequence)) return;
+        const rtt = Math.round(performance.now() - pendingPings.get(message.sequence));
+        pendingPings.delete(message.sequence);
+        lastRttAt = performance.now();
+        latencySamples.push(rtt);
+        if (latencySamples.length > 5) latencySamples.shift();
+        const sorted = [...latencySamples].sort((a, b) => a - b);
+        const median = sorted[Math.floor(sorted.length / 2)];
+        $("latency").textContent = `Control RTT: ${median} ms median`;
+      } catch { /* Ignore messages outside the motion protocol. */ }
+    });
     peer.addEventListener("track", ({ track }) => {
       if (pc !== peer) return;
       const stream = screen.srcObject || new MediaStream();
@@ -92,7 +164,7 @@ $("connection").addEventListener("submit", async (event) => {
     peer.addEventListener("connectionstatechange", () => {
       if (pc !== peer) return;
       if (["failed", "disconnected", "closed"].includes(peer.connectionState)) {
-        stop().then(() => status("Connection lost. Check host capture, certificate, UDP/firewall or TURN configuration."));
+        stop().then(() => status("Connection lost. Check host DNS, network/firewall, trusted TLS certificate, and UDP/ICE or TURN configuration."));
       }
     });
     await peer.setLocalDescription(await peer.createOffer());
@@ -111,11 +183,23 @@ $("connection").addEventListener("submit", async (event) => {
       body: JSON.stringify({ sdp: peer.localDescription.sdp, ...dimensions() }),
       cache: "no-store", signal: AbortSignal.timeout(20000),
     });
-    if (!response.ok) throw new Error(`Host refused connection (${response.status}): ${await response.text()}`);
+    if (!response.ok) {
+      const body = await response.text();
+      const details = response.status === 401 ? "The access token was rejected."
+        : response.status === 403 ? "The GitHub Pages origin is not allowlisted by the gateway."
+        : response.status === 503 ? "The native host bridge is unavailable. Check that the host and gateway are running."
+        : response.status === 429 ? "The browser session queue is full."
+        : body || "The gateway refused the connection.";
+      throw new Error(`Gateway error ${response.status}: ${details}`);
+    }
     const answer = await response.json();
     if (attempt !== generation) { peer.close(); return; }
     sessionId = answer.id;
     backend = answer.capture;
+    capabilities = { touch: answer.capabilities?.touch === true, pen: answer.capabilities?.pen === true };
+    $("input-capabilities").textContent = backend === "native-host"
+      ? `Host input: ${capabilities.touch ? "multitouch" : "no multitouch"} · ${capabilities.pen ? "stylus pressure/tilt/eraser" : "no stylus input"}. Unsupported inputs are not converted to mouse.`
+      : "Standalone gateway supports mouse input only; native multitouch and stylus are unavailable.";
     $("microphone").disabled = !answer.microphone;
     await peer.setRemoteDescription({ type: "answer", sdp: answer.sdp });
     $("connection").hidden = true;
@@ -135,11 +219,58 @@ $("connection").addEventListener("submit", async (event) => {
   } catch (error) {
     if (attempt !== generation) return;
     await stop();
-    status(`${error.message} If hosted on GitHub Pages, accept local-network permission and use a trusted host TLS certificate.`);
+    const detail = isTransientNetworkError(error)
+      ? "The gateway could not be reached. Check the hostname DNS result (including NXDOMAIN), network/firewall and port 47990, then verify that the TLS certificate is trusted and matches the host name. Use “Trust host certificate…” to open the browser's manual certificate screen."
+      : error.message;
+    status(`${detail} GitHub Pages also requires its exact origin to be allowlisted and local-network access permission.`);
   }
 });
 
 $("disconnect").addEventListener("click", () => stop());
+function flushMotions() {
+  motionFrame = undefined;
+  const motions = [...pendingMotions.values()];
+  pendingMotions.clear();
+  motions.forEach(sendMotion);
+}
+function queueMotion(message) {
+  const key = message.type === "move" ? "mouse" : `${message.type}:${message.id}:${message.generation}`;
+  pendingMotions.set(key, message);
+  if (!motionFrame) motionFrame = requestAnimationFrame(flushMotions);
+}
+function nextGeneration(pointerId) {
+  const value = nextContactGeneration(contactGenerations.get(pointerId));
+  contactGenerations.set(pointerId, value);
+  return value;
+}
+function nativePointerType(type) {
+  return type === "touch" ? capabilities.touch : capabilities.pen;
+}
+function beginPointer(event, type) {
+  const generation = nextGeneration(event.pointerId);
+  const contact = pointerControl(event, screen, type, "down", generation);
+  if (!contact) return false;
+  activePointers.set(event.pointerId, contact);
+  send(contact);
+  queueMotion({ ...contact, phase: "move" });
+  return true;
+}
+function movePointer(event, type) {
+  const generation = contactGenerations.get(event.pointerId);
+  if (!generation) return;
+  const latest = coalescedPointerEvent(event);
+  if (!activePointers.has(event.pointerId)) return;
+  const message = pointerControl(latest, screen, type, "move", generation);
+  if (message) queueMotion(message);
+}
+function endPointer(event, type, phase = "up") {
+  const contact = activePointers.get(event.pointerId);
+  if (!contact || contact.type !== type) return;
+  const position = pointerPosition(event, screen);
+  send({ ...contact, phase, ...(position || {}) });
+  activePointers.delete(event.pointerId);
+  pendingMotions.delete(`${type}:${event.pointerId}:${contact.generation}`);
+}
 async function stopMicrophone() {
   micStream?.getTracks().forEach((track) => track.stop());
   micStream = undefined;
@@ -190,6 +321,22 @@ window.addEventListener("blur", release);
 document.addEventListener("visibilitychange", () => { if (document.hidden) release(); });
 screen.addEventListener("contextmenu", (event) => event.preventDefault());
 screen.addEventListener("pointerdown", (event) => {
+  if (event.pointerType === "touch" && backend === "native-host") {
+    if (!capabilities.touch) return;
+    screen.focus();
+    screen.setPointerCapture(event.pointerId);
+    beginPointer(event, "touch");
+    event.preventDefault();
+    return;
+  }
+  if (event.pointerType === "pen" && backend === "native-host") {
+    if (!capabilities.pen) return;
+    screen.focus();
+    screen.setPointerCapture(event.pointerId);
+    beginPointer(event, "pen");
+    event.preventDefault();
+    return;
+  }
   if (!event.isPrimary) return;
   if (document.pointerLockElement === screen) {
     send({ type: "button", button: event.button, down: true });
@@ -205,22 +352,48 @@ screen.addEventListener("pointerdown", (event) => {
   event.preventDefault();
 });
 screen.addEventListener("pointermove", (event) => {
+  if (event.pointerType === "touch" && backend === "native-host") {
+    if (activePointers.has(event.pointerId)) movePointer(event, "touch");
+    return;
+  }
+  if (event.pointerType === "pen" && backend === "native-host") {
+    if (capabilities.pen) movePointer(event, "pen");
+    return;
+  }
   if (document.pointerLockElement === screen) return;
   if (!event.isPrimary) return;
   const position = pointerPosition(event, screen);
-  if (position) send({ type: "move", ...position });
+  if (position) queueMotion({ type: "move", ...position });
 });
 screen.addEventListener("pointerup", (event) => {
+  if (event.pointerType === "touch" && backend === "native-host") {
+    endPointer(event, "touch");
+    const position = pointerPosition(event, screen);
+    if (position) send({ type: "focus", ...position });
+    if (screen.hasPointerCapture(event.pointerId)) screen.releasePointerCapture(event.pointerId);
+    event.preventDefault();
+    return;
+  }
+  if (event.pointerType === "pen" && backend === "native-host") {
+    endPointer(event, "pen");
+    if (screen.hasPointerCapture(event.pointerId)) screen.releasePointerCapture(event.pointerId);
+    event.preventDefault();
+    return;
+  }
   if (!event.isPrimary) return;
   send({ type: "button", button: event.button, down: false });
-  if (event.pointerType === "touch" && backend === "native-host") {
-    const position = pointerPosition(event, screen);
-    if (position) send({type: "focus", ...position});
-  }
   if (screen.hasPointerCapture(event.pointerId)) screen.releasePointerCapture(event.pointerId);
 });
-screen.addEventListener("pointercancel", release);
-screen.addEventListener("lostpointercapture", release);
+screen.addEventListener("pointercancel", (event) => {
+  if (event.pointerType === "touch") endPointer(event, "touch", "cancel");
+  else if (event.pointerType === "pen") endPointer(event, "pen", "cancel");
+  else release();
+});
+screen.addEventListener("lostpointercapture", (event) => {
+  const contact = activePointers.get(event.pointerId);
+  if (contact) endPointer(event, contact.type, "cancel");
+  else if (event.pointerType !== "touch" && event.pointerType !== "pen") release();
+});
 screen.addEventListener("wheel", (event) => { send({ type: "wheel", delta: Math.max(-1200,Math.min(1200,event.deltaY)) }); event.preventDefault(); }, { passive: false });
 $("remote-text").addEventListener("beforeinput", (event) => {
   if (composingText || event.isComposing) return;
@@ -252,6 +425,37 @@ window.visualViewport?.addEventListener("resize", resized);
 window.addEventListener("resize", resized);
 document.addEventListener("fullscreenchange", () => { release(); if (!document.fullscreenElement) navigator.keyboard?.unlock(); resized(); });
 window.addEventListener("pagehide", () => stop());
-window.addEventListener("beforeinstallprompt", (event) => { event.preventDefault(); pendingInstall = event; $("install").hidden = false; });
-$("install").addEventListener("click", async () => { await pendingInstall?.prompt(); pendingInstall = undefined; $("install").hidden = true; });
+window.addEventListener("beforeinstallprompt", (event) => { event.preventDefault(); pendingInstall = event; $("install").textContent = "Install app"; });
+$("install").addEventListener("click", async () => {
+  if (!pendingInstall) {
+    const appleTouch = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const platform = appleTouch ? "iOS/iPadOS: tap Share, then “Add to Home Screen”."
+      : /android/i.test(navigator.userAgent) ? "Android: open the browser menu and choose “Install app” or “Add to Home screen”."
+      : "Open your browser's install or “Create shortcut” menu to add Njk Stream.";
+    status(`Install instructions — ${platform}`);
+    return;
+  }
+  try { await pendingInstall.prompt(); }
+  catch (error) { status(`Install prompt unavailable: ${error.message}`); }
+  finally {
+    pendingInstall = undefined;
+    $("install").textContent = "Install / add to home screen";
+  }
+});
+function openTrustPage() {
+  try {
+    const origin = new URL(hostEndpoint($("host").value)).origin;
+    trustOrigin = origin;
+    trustPopup = window.open(`${origin}/trust`, "njk-host-certificate-trust", "popup,width=620,height=760");
+    if (!trustPopup) status("Certificate window was blocked. Allow popups for this site and try again.");
+    else status("In the host window, manually accept the browser certificate warning. Njk Stream never bypasses certificate checks.");
+  } catch (error) { status(error.message); }
+}
+$("trust-host").addEventListener("click", openTrustPage);
+window.addEventListener("message", (event) => {
+  if (event.source !== trustPopup || event.origin !== trustOrigin || event.data?.type !== "njk-certificate-trusted") return;
+  trustPopup = trustOrigin = undefined;
+  status("Host certificate page loaded after your manual browser acceptance. Retry Connect; trust does not bypass TLS validation.");
+});
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch((error) => status(`Offline installation unavailable: ${error.message}`));
