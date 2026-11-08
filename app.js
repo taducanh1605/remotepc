@@ -268,13 +268,23 @@ $("connection").addEventListener("submit", async (event) => {
     immersive.connected();
     $("disconnect").disabled = $("fullscreen").disabled = false;
     status("WebRTC negotiated. Waiting for actual video frames…");
+    let previousVideo;
     statsTimer = setInterval(async () => {
       if (pc !== peer) return;
       const stats = await peer.getStats();
       if (pc !== peer) return;
       let decoded = 0;
       for (const report of stats.values()) {
-        if (report.type === "inbound-rtp" && report.kind === "video") decoded += report.framesDecoded || 0;
+        if (report.type === "inbound-rtp" && report.kind === "video") {
+          decoded += report.framesDecoded || 0;
+          if (previousVideo && report.timestamp > previousVideo.timestamp) {
+            const seconds = (report.timestamp - previousVideo.timestamp) / 1000;
+            const fps = Math.max(0, (report.framesDecoded - previousVideo.framesDecoded) / seconds);
+            const kbps = Math.max(0, (report.bytesReceived - previousVideo.bytesReceived) * 8 / seconds / 1000);
+            $("video-quality").textContent = `${fps.toFixed(1)} decoded FPS · ${Math.round(kbps)} kbps · ${report.framesDropped || 0} dropped frames`;
+          }
+          previousVideo = { timestamp: report.timestamp, framesDecoded: report.framesDecoded || 0, bytesReceived: report.bytesReceived || 0 };
+        }
       }
       if (decoded > 0 && queuePosition === 0) status(`Streaming · ${screen.videoWidth}×${screen.videoHeight} · ${decoded} decoded frames · ${backend === "native-host" ? (displayLeader ? "display leader" : "shared display follower") : "standalone"}`);
     }, 2000);
