@@ -137,6 +137,8 @@ async function stopSession(notify) {
   $("exit-quit").disabled = true;
   $("latency").textContent = "Control RTT: measuring…";
   $("quality-request").textContent = "";
+  $("audio-status").textContent = "";
+  automaticFullscreenPending = false;
   capabilities = { touch: false, pen: false };
   queuePosition = 0;
   displayLeader = false;
@@ -204,6 +206,11 @@ $("connection").addEventListener("submit", async (event) => {
           $("quality-request").textContent = message.success === true
             ? `Encoder applied ${message.bitrateKbps} kbps.`
             : "Encoder could not apply the bitrate change. Previous quality remains active.";
+        }
+        if (message.type === "audio-feedback" && typeof message.blocked === "boolean") {
+          $("audio-status").textContent = message.blocked
+            ? "Audio silenced for this same-host viewer to prevent speaker feedback. Remote devices retain desktop audio."
+            : "Desktop audio enabled for this viewer.";
         }
         if (message.type === "text-focus" && typeof message.editable === "boolean") {
           if (message.request !== pendingFocus || !pendingFocus) return;
