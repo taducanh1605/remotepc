@@ -57,8 +57,9 @@
         permission if prompted. A trusted host certificate and reachable UDP ICE path (or your own TURN server) are required.</p>
       <p>Microphone is opt-in, requires browser permission, and is available only when the native host advertises a configured virtual-cable sink.
         It is never enabled automatically. Standalone desktop sound requires a configured Windows system-audio loopback device, not a microphone.</p>
-      <p>The standalone fallback captures the Windows virtual desktop with FFmpeg, separately from native Sunshine sessions;
-        it does not arbitrate native virtual-display ownership. The native backend requires host lifecycle integration.
+      <p>The standalone fallback captures the Windows virtual desktop with FFmpeg, separately from Njk Host's native sessions;
+        it does not arbitrate native virtual-display ownership. Njk Host includes the integrated native browser backend:
+        run its packaged gateway in native mode with matching authentication and trusted TLS. No user coding is required.
         Access tokens grant desktop control; keep them secret.</p>
       <p>Immersive mode requests fullscreen and keyboard lock where available. Exit using the visible Exit button or Escape.
         Android navigation/back gestures, Windows shortcuts and secure Ctrl+Alt+Delete cannot universally be intercepted.
