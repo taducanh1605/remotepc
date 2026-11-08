@@ -30,7 +30,7 @@ let lastDimensions;
 let micChannel, micStream, micContext, trustPopup, trustOrigin, trustNonce, trustTimer;
 let stopPromise;
 let remoteLaunch;
-let returnToESPWake = false, handoffOpener, handoffNonce, handoffRefreshDeadline;
+let returnToESPWake = false, handoffOpener, handoffBroker, handoffNonce, handoffRefreshDeadline;
 let automaticConnection = false;
 let automaticFullscreenPending = false;
 let focusRequest = 0, pendingFocus = 0, focusTimer;
@@ -82,6 +82,9 @@ if (launchParameters.has("ticket")) {
     returnToESPWake = launchParameters.get("return") === "espwake";
     handoffNonce = launchParameters.get("nonce");
     handoffOpener = returnToESPWake && handoffNonce ? window.opener : null;
+    if (returnToESPWake && handoffNonce && typeof BroadcastChannel === "function") {
+      handoffBroker = new BroadcastChannel(`njk-handoff-${handoffNonce}`);
+    }
   } catch (error) { status(error.message); }
 }
 const send = (message) => {
@@ -749,21 +752,34 @@ async function connectFromESPWake() {
       body: JSON.stringify({ ticket: remoteLaunch.ticket }),
       cache: "no-store", signal: AbortSignal.timeout(10000),
     });
-    if (response.status === 401 && handoffOpener) {
+    if (response.status === 401 && (handoffOpener || handoffBroker)) {
       handoffRefreshDeadline ||= Date.now() + 90000;
       if (Date.now() >= handoffRefreshDeadline) throw new Error("Remote access could not refresh within 90 seconds. Check the Windows helper and gateway.");
       status("Access expired. Getting a fresh ticket from ESPWake…");
       const data = await new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => { window.removeEventListener("message", receive); reject(new Error("The Windows helper has not refreshed access. Check that it is running.")); }, Math.min(80000, handoffRefreshDeadline - Date.now()));
-        function receive(event) {
-          if (event.source !== handoffOpener || event.origin !== location.origin || event.data?.nonce !== handoffNonce || event.data.type !== "njk-fresh-ticket") return;
-          clearTimeout(timeout);
+        const cleanup = () => {
           window.removeEventListener("message", receive);
-          if (event.data.error) reject(new Error(event.data.error));
-          else resolve(event.data);
+          handoffBroker?.removeEventListener("message", receiveBroadcast);
+        };
+        const timeout = setTimeout(() => { cleanup(); reject(new Error("ESPWake did not provide fresh access. Keep ESPWake open and check the Windows helper.")); }, Math.min(80000, handoffRefreshDeadline - Date.now()));
+        function accept(data) {
+          if (data?.nonce !== handoffNonce || data.type !== "njk-fresh-ticket") return;
+          clearTimeout(timeout);
+          cleanup();
+          if (data.error) reject(new Error(data.error));
+          else resolve(data);
         }
+        function receive(event) {
+          if (event.source !== handoffOpener || event.origin !== location.origin) return;
+          accept(event.data);
+        }
+        function receiveBroadcast(event) { accept(event.data); }
         window.addEventListener("message", receive);
-        handoffOpener.postMessage({ type: "njk-refresh-ticket", nonce: handoffNonce }, location.origin);
+        const request = { type: "njk-refresh-ticket", nonce: handoffNonce };
+        if (handoffBroker) {
+          handoffBroker.addEventListener("message", receiveBroadcast);
+          handoffBroker.postMessage(request);
+        } else handoffOpener.postMessage(request, location.origin);
       });
       if (data.host !== remoteLaunch.host || !/^[a-f0-9]{32}$/.test(data.ticket || "")) throw new Error("ESPWake returned an invalid replacement ticket.");
       remoteLaunch.ticket = data.ticket;
@@ -777,6 +793,9 @@ async function connectFromESPWake() {
     automaticConnection = true;
     remoteLaunch = undefined;
     handoffOpener?.postMessage({ type: "njk-handoff-complete", nonce: handoffNonce }, location.origin);
+    handoffBroker?.postMessage({ type: "njk-handoff-complete", nonce: handoffNonce });
+    handoffBroker?.close();
+    handoffBroker = undefined;
     handoffOpener = undefined;
     window.opener = null;
     $("connection").requestSubmit();
@@ -786,6 +805,9 @@ async function connectFromESPWake() {
       openTrustPage();
     } else {
       remoteLaunch = undefined;
+      handoffBroker?.postMessage({ type: "njk-handoff-complete", nonce: handoffNonce });
+      handoffBroker?.close();
+      handoffBroker = undefined;
       status(error.message);
     }
   }
