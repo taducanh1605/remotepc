@@ -33,10 +33,12 @@
         <button id="fullscreen" disabled>Enter immersive mode</button>
         <button id="disconnect" disabled>Disconnect</button>
         <button id="microphone" disabled aria-pressed="false">Enable microphone</button>
+        <button id="desktop-audio" disabled>Mute desktop audio</button>
+        <output id="playback-status" role="status" aria-live="polite"></output>
         <label for="stream-fps">Frame rate</label>
         <select id="stream-fps"><option value="60">60 FPS</option><option value="30">30 FPS (data saver)</option></select>
         <label for="stream-bitrate">Bitrate limit</label>
-        <select id="stream-bitrate"><option value="auto">Automatic</option><option value="1000">1 Mbps</option><option value="2000">2 Mbps</option><option value="4000">4 Mbps</option><option value="8000">8 Mbps</option></select>
+        <select id="stream-bitrate"><option value="auto">Automatic (high quality)</option><option value="1000">1 Mbps</option><option value="2000">2 Mbps</option><option value="4000">4 Mbps</option><option value="8000">8 Mbps</option><option value="12000">12 Mbps</option><option value="20000">20 Mbps</option></select>
         <button id="apply-quality" disabled>Apply quality</button>
         <output id="video-quality">Video quality: negotiating…</output>
         <output id="quality-request" role="status" aria-live="polite"></output>
@@ -100,6 +102,6 @@
       <p><a href="https://github.com/taducanh1605/remotepc/releases/latest" target="_blank" rel="noopener">Download Njk Host and Njk Stream releases</a></p>
     </details>
   </main>
-  <script type="module" src="./app.js?v=20261108-audiofeedback"></script>
+  <script type="module" src="./app.js?v=20261108-playback"></script>
 </body>
 </html>

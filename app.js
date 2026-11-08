@@ -1,14 +1,16 @@
 import {
+  automaticBitrate,
   coalescedPointerEvent,
   hostEndpoint,
   isTransientNetworkError,
   nextContactGeneration,
   pointerControl,
   pointerPosition,
+  playDesktop,
   requestFullscreenInGesture,
   viewportDimensions,
   visibleViewport,
-} from "./protocol.mjs";
+} from "./protocol.mjs?v=20261108-playback";
 import { installImmersive } from "./immersive.mjs";
 
 const $ = (id) => document.getElementById(id);
@@ -42,8 +44,17 @@ const viewport = () => visibleViewport(window.visualViewport, { width: innerWidt
 const dimensions = () => viewportDimensions(viewport(), 1);
 function requestedQuality() {
   const fps = Number($("stream-fps").value), size = dimensions();
-  const bitrateKbps = $("stream-bitrate").value === "auto" ? Math.max(700, Math.min(5000, Math.floor(size.width * size.height * fps / 12000))) : Number($("stream-bitrate").value);
+  const bitrateKbps = $("stream-bitrate").value === "auto" ? automaticBitrate(size.width, size.height, fps) : Number($("stream-bitrate").value);
   return { fps, bitrateKbps };
+}
+async function startPlayback(enableAudio = false) {
+  try {
+    const muted = await playDesktop(screen, enableAudio);
+    $("desktop-audio").textContent = muted ? "Enable desktop audio" : "Mute desktop audio";
+    $("playback-status").textContent = muted ? "Video is playing. Enable desktop audio in the menu or tap the video." : "";
+  } catch (error) {
+    $("playback-status").textContent = `Playback failed: ${error.message}`;
+  }
 }
 try {
   const saved = localStorage.getItem("njk-host-origin");
@@ -119,6 +130,9 @@ async function stopSession(notify) {
   pc?.close();
   channel = motionChannel = pc = undefined;
   screen.srcObject = null;
+  screen.muted = false;
+  $("playback-status").textContent = "";
+  $("desktop-audio").disabled = true;
   $("stream-shell").hidden = true;
   document.body.classList.remove("streaming");
   document.querySelector('meta[name="theme-color"]').content = "#14231d";
@@ -179,6 +193,7 @@ $("connection").addEventListener("submit", async (event) => {
     $("token").value = "";
     status("Negotiating authenticated WebRTC…");
     const peer = new RTCPeerConnection();
+    let disconnectTimer;
     pc = peer;
     const video = peer.addTransceiver("video", { direction: "recvonly" });
     const h264 = RTCRtpReceiver.getCapabilities("video")?.codecs.filter((codec) => codec.mimeType.toLowerCase() === "video/h264");
@@ -257,11 +272,17 @@ $("connection").addEventListener("submit", async (event) => {
       const stream = screen.srcObject || new MediaStream();
       stream.addTrack(track);
       screen.srcObject = stream;
-      screen.play().catch(() => status("Media connected. Tap the video to enable playback and audio."));
+      startPlayback();
     });
     peer.addEventListener("connectionstatechange", () => {
       if (pc !== peer) return;
-      if (["failed", "disconnected", "closed"].includes(peer.connectionState)) {
+      clearTimeout(disconnectTimer);
+      if (peer.connectionState === "disconnected") {
+        status("Network interrupted. Waiting up to 10 seconds for ICE to recover…");
+        disconnectTimer = setTimeout(() => {
+          if (pc === peer && peer.connectionState === "disconnected") stop().then(() => status("Network did not recover. Reconnect when the host is reachable."));
+        }, 10000);
+      } else if (["failed", "closed"].includes(peer.connectionState)) {
         stop().then(() => status("Connection lost. Check host DNS, network/firewall, trusted TLS certificate, and UDP/ICE or TURN configuration."));
       }
     });
@@ -313,6 +334,7 @@ $("connection").addEventListener("submit", async (event) => {
     resized();
     immersive.connected();
     $("disconnect").disabled = $("fullscreen").disabled = false;
+    $("desktop-audio").disabled = false;
     status("WebRTC negotiated. Waiting for actual video frames…");
     let previousVideo;
     statsTimer = setInterval(async () => {
@@ -451,7 +473,13 @@ $("microphone").addEventListener("click", async () => {
   } catch (error) { await stopMicrophone(); status(`Microphone unavailable: ${error.message}`); }
   finally { if (pc && backend === "native-host") $("microphone").disabled = false; }
 });
-screen.addEventListener("click", () => screen.play().catch(() => {}));
+screen.addEventListener("click", () => startPlayback(true));
+$("desktop-audio").addEventListener("click", () => {
+  if (!screen.muted) {
+    screen.muted = true;
+    $("desktop-audio").textContent = "Enable desktop audio";
+  } else startPlayback(true);
+});
 screen.addEventListener("keydown", (event) => {
   if (event.code === "Escape") { release(); return; }
   if (!event.repeat) send({ type: "key", code: event.code, down: true });
@@ -583,6 +611,7 @@ const resized = () => {
     if (channel?.readyState !== "open") return;
     lastDimensions = next;
     send({ type: "resize", ...next });
+    if ($("stream-bitrate").value === "auto") send({ type: "quality", ...requestedQuality() });
   }, 120);
 };
 window.visualViewport?.addEventListener("resize", resized);

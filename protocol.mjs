@@ -15,6 +15,22 @@ export function viewportDimensions(viewport, pixelRatio = 1) {
   };
 }
 
+export function automaticBitrate(width, height, fps) {
+  return Math.max(2000, Math.min(20000, Math.floor(width * height * fps / 6000)));
+}
+
+export async function playDesktop(video, enableAudio = false) {
+  if (enableAudio) video.muted = false;
+  try {
+    await video.play();
+  } catch (error) {
+    if (error.name !== "NotAllowedError" || video.muted) throw error;
+    video.muted = true;
+    await video.play();
+  }
+  return video.muted;
+}
+
 export function visibleViewport(viewport, layout, keyboard) {
   const top = Math.max(0, viewport?.offsetTop || 0);
   const width = viewport?.width || layout.width;
