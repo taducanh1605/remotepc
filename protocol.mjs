@@ -55,10 +55,12 @@ export function pointerControl(event, video, type, phase, generation) {
     pressure: Math.max(0, Math.min(1, Number.isFinite(event.pressure) ? event.pressure : 0)),
   };
   if (type === "pen") {
-    const tiltX = Number.isFinite(event.tiltX) ? event.tiltX : 0;
-    const tiltY = Number.isFinite(event.tiltY) ? event.tiltY : 0;
-    control.tilt = Math.min(90, Math.round(Math.hypot(tiltX, tiltY)));
-    control.rotation = Number.isFinite(event.twist) ? Math.max(0, Math.min(359, Math.round(event.twist))) : 0;
+    const tiltX = Math.max(-89.9, Math.min(89.9, Number.isFinite(event.tiltX) ? event.tiltX : 0));
+    const tiltY = Math.max(-89.9, Math.min(89.9, Number.isFinite(event.tiltY) ? event.tiltY : 0));
+    const x = Math.tan(tiltX * Math.PI / 180), y = Math.tan(tiltY * Math.PI / 180);
+    // The platform helper represents tilt as a polar angle plus azimuth.
+    control.tilt = Math.round(Math.atan(Math.hypot(x, y)) * 180 / Math.PI);
+    control.rotation = (Math.round(Math.atan2(-x, y) * 180 / Math.PI) + 360) % 360;
     control.tool = event.button === 5 || (event.buttons & 32) ? "eraser" : "pen";
     control.buttons = event.buttons & 2 ? 1 : 0;
   }

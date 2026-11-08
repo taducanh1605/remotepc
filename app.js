@@ -28,13 +28,21 @@ const pendingPings = new Map();
 const latencySamples = [];
 let pingSequence = 0;
 let lastRttAt = 0;
+let motionSequence = 0;
 const status = (text) => { $("status").textContent = text; };
 const dimensions = () => viewportDimensions(window.visualViewport || { width: innerWidth, height: innerHeight }, devicePixelRatio);
 const send = (message) => {
-  if (channel?.readyState === "open" && channel.bufferedAmount < 65536) channel.send(JSON.stringify(message));
+  if (channel?.readyState !== "open") return;
+  if (channel.bufferedAmount >= 65536) {
+    pc?.close();
+    return;
+  }
+  channel.send(JSON.stringify(message));
 };
 const sendMotion = (message) => {
-  if (motionChannel?.readyState === "open" && motionChannel.bufferedAmount < 16384) motionChannel.send(JSON.stringify(message));
+  if (motionChannel?.readyState === "open" && motionChannel.bufferedAmount < 16384) {
+    motionChannel.send(JSON.stringify({ ...message, sequence: message.type === "latency-ping" ? message.sequence : ++motionSequence }));
+  }
 };
 const release = () => {
   for (const contact of activePointers.values()) send({ ...contact, phase: "cancel" });
@@ -117,7 +125,7 @@ $("connection").addEventListener("submit", async (event) => {
         if (message.type === "leadership") displayLeader = message.leader === true;
         if (message.type === "text-focus" && typeof message.editable === "boolean") {
           $("remote-text").hidden = $("remote-text-label").hidden = $("remote-text-help").hidden = !message.editable;
-          if (message.editable) $("remote-text").focus();
+          if (message.editable && activePointers.size === 0) $("remote-text").focus();
         }
         if (message.success === false) status(`Host ${message.type} failed.`);
       } catch { /* Ignore messages outside the negotiated JSON control protocol. */ }
@@ -369,7 +377,7 @@ screen.addEventListener("pointerup", (event) => {
   if (event.pointerType === "touch" && backend === "native-host") {
     endPointer(event, "touch");
     const position = pointerPosition(event, screen);
-    if (position) send({ type: "focus", ...position });
+    if (position && activePointers.size === 0) send({ type: "focus", ...position });
     if (screen.hasPointerCapture(event.pointerId)) screen.releasePointerCapture(event.pointerId);
     event.preventDefault();
     return;
@@ -426,7 +434,7 @@ window.addEventListener("resize", resized);
 document.addEventListener("fullscreenchange", () => { release(); if (!document.fullscreenElement) navigator.keyboard?.unlock(); resized(); });
 window.addEventListener("pagehide", () => stop());
 window.addEventListener("beforeinstallprompt", (event) => { event.preventDefault(); pendingInstall = event; $("install").textContent = "Install app"; });
-$("install").addEventListener("click", async () => {
+async function installApp() {
   if (!pendingInstall) {
     const appleTouch = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
       (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
@@ -442,7 +450,9 @@ $("install").addEventListener("click", async () => {
     pendingInstall = undefined;
     $("install").textContent = "Install / add to home screen";
   }
-});
+}
+$("install").addEventListener("click", installApp);
+$("install-stream").addEventListener("click", installApp);
 function openTrustPage() {
   try {
     const origin = new URL(hostEndpoint($("host").value)).origin;
