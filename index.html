@@ -48,6 +48,11 @@
         <button id="exit-immersive">Exit immersive</button>
         <button id="pointer-lock">Lock mouse</button>
         <button id="soft-keyboard" aria-pressed="false">Keyboard</button>
+        <label for="typing-mode">Text input</label>
+        <select id="typing-mode"><option value="host">Host keyboard / UniKey (US layout)</option><option value="unicode">Direct Unicode / mobile IME</option></select>
+        <output id="keyboard-status" role="status" aria-live="polite"></output>
+        <label class="check-option"><input id="gamepad" type="checkbox" disabled> Enable gamepads</label>
+        <output id="gamepad-status" role="status" aria-live="polite"></output>
         <button id="right-click">Right click</button>
         <button id="scroll-up" aria-label="Scroll remote desktop up">Scroll ↑</button>
         <button id="scroll-down" aria-label="Scroll remote desktop down">Scroll ↓</button>
@@ -64,7 +69,7 @@
         </nav>
       </details>
     <label for="remote-text" id="remote-text-label" hidden>Remote text input</label>
-    <textarea id="remote-text" hidden rows="1" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="remote-text-help"></textarea>
+    <textarea id="remote-text" hidden rows="1" inputmode="none" virtualkeyboardpolicy="manual" tabindex="-1" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Remote keyboard input" aria-describedby="remote-text-help"></textarea>
     <p id="remote-text-help" hidden>Text is sent to the focused host control. This field opens the mobile keyboard only when the native host confirms an editable control.</p>
       <dialog id="exit-dialog" aria-labelledby="exit-title">
         <h2 id="exit-title">Leave the stream?</h2>
@@ -101,12 +106,18 @@
         Higher detail provides sharper text but more desktop space and uses more bandwidth.
         Select Standard (1×) if host controls appear too small; the local magnifier can enlarge your view.</p>
       <p>The monitor button in ESP Wake can connect automatically using a short-lived, single-use ticket.
-        The ticket is removed from browser history before connection; host credentials are not stored on the ESP32 or in browser storage.</p>
+        The ticket is removed from browser history before connection; host credentials are not stored on the ESP32 or in browser storage.
+        Expired access is refreshed through the launching ESPWake tab. Disconnect or Quit closes this launched tab only after the host confirms success.</p>
+      <p>Host keyboard mode sends native key events for ASCII text so UniKey/Telex can run on the host; use a US host keyboard layout.
+        Direct Unicode mode sends text already composed by your phone keyboard, including accents and emoji.
+        Automatic soft-keyboard requests require host editable-focus confirmation and browser support; the Keyboard menu button is always available.</p>
+      <p>Enable gamepads to use up to four standard browser-mapped controllers through the host virtual-controller driver.
+        Press a controller button after connecting so the browser can expose it. Input stops on blur, hidden pages or disconnect.</p>
       <p>Native Windows touch and stylus (including pressure, tilt and eraser) are enabled only when the host advertises those capabilities.
         The displayed control RTT measures the motion data channel round trip to the gateway; it is not end-to-end video/display latency.</p>
       <p><a href="https://github.com/taducanh1605/remotepc/releases/latest" target="_blank" rel="noopener">Download Njk Host and Njk Stream releases</a></p>
     </details>
   </main>
-  <script type="module" src="./app.js?v=20261108-playback2"></script>
+  <script type="module" src="./app.js?v=20261108-controls"></script>
 </body>
 </html>

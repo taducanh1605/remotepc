@@ -11,7 +11,9 @@ import {
   viewportDimensions,
   visibleViewport,
 } from "./protocol.mjs?v=20261108-playback";
-import { installImmersive } from "./immersive.mjs";
+import { installImmersive } from "./immersive.mjs?v=20261108-controls";
+import { installGamepads } from "./gamepad.mjs?v=20261108-controls";
+import { typingMessages } from "./typing.mjs?v=20261108-controls";
 
 const $ = (id) => document.getElementById(id);
 const screen = $("screen");
@@ -28,6 +30,7 @@ let lastDimensions;
 let micChannel, micStream, micContext, trustPopup, trustOrigin, trustNonce, trustTimer;
 let stopPromise;
 let remoteLaunch;
+let returnToESPWake = false, handoffOpener, handoffNonce, handoffRefreshDeadline;
 let automaticConnection = false;
 let automaticFullscreenPending = false;
 let focusRequest = 0, pendingFocus = 0, focusTimer;
@@ -76,6 +79,9 @@ if (launchParameters.has("ticket")) {
     $("host").value = host;
     $("connect-fullscreen").checked = true;
     remoteLaunch = { host, ticket };
+    returnToESPWake = launchParameters.get("return") === "espwake";
+    handoffNonce = launchParameters.get("nonce");
+    handoffOpener = returnToESPWake && handoffNonce ? window.opener : null;
   } catch (error) { status(error.message); }
 }
 const send = (message) => {
@@ -92,6 +98,7 @@ const sendMotion = (message) => {
   }
 };
 const release = () => {
+  gamepads.release();
   for (const contact of activePointers.values()) send({ ...contact, phase: "cancel" });
   activePointers.clear();
   pendingMotions.clear();
@@ -101,12 +108,25 @@ const release = () => {
 };
 function setKeyboard(visible) {
   keyboardVisible = visible;
-  $("remote-text").hidden = $("remote-text-label").hidden = $("remote-text-help").hidden = !visible;
+  $("remote-text").hidden = false;
+  $("remote-text").inputMode = visible ? "text" : "none";
+  $("remote-text-label").hidden = $("remote-text-help").hidden = !visible;
   $("soft-keyboard").setAttribute("aria-pressed", String(visible));
-  if (visible) $("remote-text").focus({ preventScroll: true });
-  else $("remote-text").blur();
+  if (visible) {
+    $("remote-text").focus({ preventScroll: true });
+    showKeyboard();
+  } else {
+    navigator.virtualKeyboard?.hide();
+    $("remote-text").blur();
+  }
+  function showKeyboard() {
+    try { navigator.virtualKeyboard?.show(); }
+    catch (error) { $("keyboard-status").textContent = `Browser keyboard request was limited: ${error.message}. Use the Keyboard menu button.`; }
+  }
 }
 const immersive = installImmersive({ send, sendMotion, release, screen, setKeyboard, available: () => channel?.readyState === "open" });
+const gamepads = installGamepads({ send, available: () => capabilities.gamepad && channel?.readyState === "open" && queuePosition === 0 && !document.hidden && document.hasFocus(),
+  report: text => { $("gamepad-status").textContent = text; } });
 
 function stop(notify = true) {
   if (stopPromise) return stopPromise;
@@ -121,6 +141,9 @@ async function stopSession(notify) {
   clearTimeout(focusTimer);
   pendingFocus = 0;
   release();
+  gamepads.stop();
+  $("gamepad").checked = false;
+  $("gamepad").disabled = true;
   setKeyboard(false);
   await immersive.disconnected();
   channel?.close();
@@ -210,6 +233,8 @@ $("connection").addEventListener("submit", async (event) => {
         if (message.type === "queue") {
           queuePosition = message.position;
           status(message.active ? "Your browser controls the stream; waiting for video frames…" : `Watching the shared stream; ${message.position} browser session(s) ahead for control.`);
+          if (message.active) gamepads.resume();
+          else gamepads.release();
         }
         if (message.type === "leadership") displayLeader = message.leader === true;
         if (message.type === "quality" && message.fps && message.bitrateKbps) {
@@ -230,7 +255,15 @@ $("connection").addEventListener("submit", async (event) => {
         if (message.type === "text-focus" && typeof message.editable === "boolean") {
           if (message.request !== pendingFocus || !pendingFocus) return;
           pendingFocus = 0;
+          $("keyboard-status").textContent = message.editable ? "Host text field focused." : "";
           if (message.editable && activePointers.size === 0 && !keyboardVisible) setKeyboard(true);
+          if (!message.editable && !keyboardVisible) {
+            $("remote-text").blur();
+            screen.focus({ preventScroll: true });
+          }
+          if (message.type === "gamepad") $("gamepad-status").textContent = message.success === false
+            ? "Host could not allocate the virtual gamepad. Check the installed controller driver."
+            : "Native gamepad connected.";
         }
         if (message.success === false) status(`Host ${message.type} failed.`);
       } catch { /* Ignore messages outside the negotiated JSON control protocol. */ }
@@ -315,7 +348,9 @@ $("connection").addEventListener("submit", async (event) => {
     if (attempt !== generation) { peer.close(); return; }
     sessionId = answer.id;
     backend = answer.capture;
-    capabilities = { touch: answer.capabilities?.touch === true, pen: answer.capabilities?.pen === true };
+    capabilities = { touch: answer.capabilities?.touch === true, pen: answer.capabilities?.pen === true, gamepad: answer.capabilities?.gamepad === true };
+    $("gamepad").disabled = !capabilities.gamepad;
+    $("gamepad-status").textContent = capabilities.gamepad ? "Enable gamepad input, then press a controller button." : "Native gamepad input is unavailable.";
     $("input-capabilities").textContent = backend === "native-host"
       ? `Host input: ${capabilities.touch ? "multitouch" : "no multitouch"} · ${capabilities.pen ? "stylus pressure/tilt/eraser" : "no stylus input"}. Unsupported inputs are not converted to mouse.`
       : "Standalone gateway supports mouse input only; native multitouch and stylus are unavailable.";
@@ -379,6 +414,10 @@ async function leaveSession(quit) {
     if (!response.ok) throw new Error(await response.text() || `Gateway error ${response.status}`);
     exitDialog.close();
     await stop(false);
+    if (returnToESPWake) {
+      window.close();
+      setTimeout(() => { if (!window.closed) location.replace("https://taducanh1605.github.io/espwake/"); }, 250);
+    }
   } catch (error) { status(`Unable to ${quit ? "quit" : "disconnect"}: ${error.message}`); $("exit-error").textContent = error.message; }
   finally { for (const id of ["exit-disconnect", "exit-quit"]) $(id).disabled = false; }
 }
@@ -493,6 +532,9 @@ screen.addEventListener("keyup", (event) => {
 screen.addEventListener("blur", release);
 window.addEventListener("blur", release);
 document.addEventListener("visibilitychange", () => { if (document.hidden) release(); });
+window.addEventListener("focus", () => gamepads.resume());
+document.addEventListener("visibilitychange", () => { if (!document.hidden) gamepads.resume(); });
+$("gamepad").addEventListener("change", () => { if ($("gamepad").checked) gamepads.start(); else gamepads.stop(); });
 screen.addEventListener("contextmenu", (event) => event.preventDefault());
 screen.addEventListener("pointerdown", (event) => {
   if (automaticFullscreenPending) {
@@ -501,7 +543,11 @@ screen.addEventListener("pointerdown", (event) => {
   }
   if (event.pointerType === "touch" && backend === "native-host") {
     if (!capabilities.touch) return;
-    if (!keyboardVisible) screen.focus({ preventScroll: true });
+    if (!keyboardVisible) {
+      $("remote-text").hidden = false;
+      $("remote-text").inputMode = "none";
+      $("remote-text").focus({ preventScroll: true });
+    }
     screen.setPointerCapture(event.pointerId);
     clearTimeout(focusTimer);
     pendingFocus = 0;
@@ -548,6 +594,7 @@ screen.addEventListener("pointermove", (event) => {
 screen.addEventListener("pointerup", (event) => {
   if (event.pointerType === "touch" && backend === "native-host") {
     endPointer(event, "touch");
+    if (keyboardVisible) showKeyboard();
     const position = pointerPosition(event, screen);
     if (position && activePointers.size === 0) {
       const request = ++focusRequest;
@@ -590,17 +637,34 @@ $("remote-text").addEventListener("beforeinput", (event) => {
   if (event.inputType === "deleteContentBackward") {
     send({type:"key",code:"Backspace",down:true});
     send({type:"key",code:"Backspace",down:false});
-  } else if (event.data) send({type:"text",text:event.data});
-  event.preventDefault();
+  } else if (event.inputType === "insertLineBreak" || event.inputType === "insertParagraph") {
+    typingMessages("\n", $("typing-mode").value).forEach(send);
+  } else if (event.data && event.cancelable) typingMessages(event.data, $("typing-mode").value).forEach(send);
+  if (event.cancelable) event.preventDefault();
 });
 $("remote-text").addEventListener("compositionstart", () => { composingText = true; });
 $("remote-text").addEventListener("compositionend", (event) => {
   composingText = false;
   committedComposition = event.data;
-  if (event.data) send({type:"text",text:event.data});
+  if (event.data) typingMessages(event.data, $("typing-mode").value).forEach(send);
   setTimeout(() => { committedComposition = undefined; $("remote-text").value = ""; }, 0);
 });
-$("remote-text").addEventListener("input", () => { if (!composingText) $("remote-text").value = ""; });
+$("remote-text").addEventListener("input", () => {
+  if (composingText) return;
+  const text = $("remote-text").value;
+  if (text && text !== committedComposition) typingMessages(text, $("typing-mode").value).forEach(send);
+  $("remote-text").value = "";
+});
+$("remote-text").addEventListener("keydown", event => {
+  if (event.isComposing || event.key === "Unidentified" || !event.code || event.key === "Process") return;
+  send({ type: "key", code: event.code, down: true });
+  event.preventDefault();
+});
+$("remote-text").addEventListener("keyup", event => {
+  if (event.isComposing || event.key === "Unidentified" || !event.code || event.key === "Process") return;
+  send({ type: "key", code: event.code, down: false });
+  event.preventDefault();
+});
 $("remote-text").addEventListener("blur", release);
 const resized = () => {
   document.documentElement.style.setProperty("--viewport-height", `${viewport().height}px`);
@@ -669,12 +733,36 @@ async function connectFromESPWake() {
       body: JSON.stringify({ ticket: remoteLaunch.ticket }),
       cache: "no-store", signal: AbortSignal.timeout(10000),
     });
-    if (!response.ok) throw new Error(`ESP Wake connection failed (${response.status}). Open RemotePC again from ESP Wake for a fresh ticket.`);
+    if (response.status === 401 && handoffOpener) {
+      handoffRefreshDeadline ||= Date.now() + 90000;
+      if (Date.now() >= handoffRefreshDeadline) throw new Error("Remote access could not refresh within 90 seconds. Check the Windows helper and gateway.");
+      status("Access expired. Getting a fresh ticket from ESPWake…");
+      const data = await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => { window.removeEventListener("message", receive); reject(new Error("The Windows helper has not refreshed access. Check that it is running.")); }, Math.min(80000, handoffRefreshDeadline - Date.now()));
+        function receive(event) {
+          if (event.source !== handoffOpener || event.origin !== location.origin || event.data?.nonce !== handoffNonce || event.data.type !== "njk-fresh-ticket") return;
+          clearTimeout(timeout);
+          window.removeEventListener("message", receive);
+          if (event.data.error) reject(new Error(event.data.error));
+          else resolve(event.data);
+        }
+        window.addEventListener("message", receive);
+        handoffOpener.postMessage({ type: "njk-refresh-ticket", nonce: handoffNonce }, location.origin);
+      });
+      if (data.host !== remoteLaunch.host || !/^[a-f0-9]{32}$/.test(data.ticket || "")) throw new Error("ESPWake returned an invalid replacement ticket.");
+      remoteLaunch.ticket = data.ticket;
+      await new Promise(resolve => setTimeout(resolve, 2500));
+      return connectFromESPWake();
+    }
+    if (!response.ok) throw new Error(`Host authorization failed (${response.status}). ${await response.text()}`);
     const result = await response.json();
     if (typeof result.token !== "string" || result.token.length < 32) throw new Error("Host returned an invalid connection credential.");
     $("token").value = result.token;
     automaticConnection = true;
     remoteLaunch = undefined;
+    handoffOpener?.postMessage({ type: "njk-handoff-complete", nonce: handoffNonce }, location.origin);
+    handoffOpener = undefined;
+    window.opener = null;
     $("connection").requestSubmit();
   } catch (error) {
     if (isTransientNetworkError(error)) {

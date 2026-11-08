@@ -28,7 +28,7 @@ export function installImmersive({ send, sendMotion = send, release, screen, ava
     try {
       if (!document.fullscreenElement) await shell.requestFullscreen();
       document.body.classList.add("immersive");
-      screen.focus();
+      if (document.activeElement !== $("remote-text")) screen.focus({ preventScroll: true });
       if (navigator.keyboard?.lock) {
         // Leave Escape unlocked so there is always a browser-provided exit.
         await navigator.keyboard.lock(["AltLeft", "AltRight", "Tab", "MetaLeft", "MetaRight", "ControlLeft", "ControlRight"]);
