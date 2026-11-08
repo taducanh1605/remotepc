@@ -156,7 +156,7 @@ async function stopSession(notify) {
   pc?.close();
   channel = motionChannel = pc = undefined;
   screen.srcObject = null;
-  screen.muted = false;
+  screen.muted = true;
   $("playback-status").textContent = "";
   $("desktop-audio").disabled = true;
   $("stream-shell").hidden = true;
@@ -323,7 +323,7 @@ $("connection").addEventListener("submit", async (event) => {
       }
       const stream = screen.srcObject || streams[0] || new MediaStream();
       if (!stream.getTracks().includes(track)) stream.addTrack(track);
-      screen.srcObject = stream;
+      if (screen.srcObject !== stream) screen.srcObject = stream;
       startPlayback();
     });
     peer.addEventListener("connectionstatechange", () => {
@@ -757,11 +757,16 @@ async function connectFromESPWake() {
       if (Date.now() >= handoffRefreshDeadline) throw new Error("Remote access could not refresh within 90 seconds. Check the Windows helper and gateway.");
       status("Access expired. Getting a fresh ticket from ESPWake…");
       const data = await new Promise((resolve, reject) => {
+        let settled = false, retry, progress;
+        const started = Date.now();
         const cleanup = () => {
+          settled = true;
+          clearTimeout(retry);
+          clearTimeout(progress);
           window.removeEventListener("message", receive);
           handoffBroker?.removeEventListener("message", receiveBroadcast);
         };
-        const timeout = setTimeout(() => { cleanup(); reject(new Error("ESPWake did not provide fresh access. Keep ESPWake open and check the Windows helper.")); }, Math.min(80000, handoffRefreshDeadline - Date.now()));
+        const timeout = setTimeout(() => { cleanup(); reject(new Error("ESPWake did not provide fresh access. Return to ESPWake, keep it visible, and open RemotePC again. Check the Windows helper if this repeats.")); }, Math.min(30000, handoffRefreshDeadline - Date.now()));
         function accept(data) {
           if (data?.nonce !== handoffNonce || data.type !== "njk-fresh-ticket") return;
           clearTimeout(timeout);
@@ -776,10 +781,20 @@ async function connectFromESPWake() {
         function receiveBroadcast(event) { accept(event.data); }
         window.addEventListener("message", receive);
         const request = { type: "njk-refresh-ticket", nonce: handoffNonce };
-        if (handoffBroker) {
-          handoffBroker.addEventListener("message", receiveBroadcast);
-          handoffBroker.postMessage(request);
-        } else handoffOpener.postMessage(request, location.origin);
+        handoffBroker?.addEventListener("message", receiveBroadcast);
+        function requestTicket() {
+          if (settled) return;
+          handoffBroker?.postMessage(request);
+          if (!settled) handoffOpener?.postMessage(request, location.origin);
+          if (!settled) retry = setTimeout(requestTicket, 3000);
+        }
+        function showProgress() {
+          if (settled) return;
+          status(`Getting fresh access from ESPWake (${Math.floor((Date.now() - started) / 1000)} s). Keep ESPWake visible; return there if it no longer has this connection open.`);
+          progress = setTimeout(showProgress, 1000);
+        }
+        requestTicket();
+        if (!settled) progress = setTimeout(showProgress, 1000);
       });
       if (data.host !== remoteLaunch.host || !/^[a-f0-9]{32}$/.test(data.ticket || "")) throw new Error("ESPWake returned an invalid replacement ticket.");
       remoteLaunch.ticket = data.ticket;
@@ -808,6 +823,7 @@ async function connectFromESPWake() {
       handoffBroker?.postMessage({ type: "njk-handoff-complete", nonce: handoffNonce });
       handoffBroker?.close();
       handoffBroker = undefined;
+      $("handoff-recovery").hidden = !returnToESPWake;
       status(error.message);
     }
   }

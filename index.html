@@ -17,16 +17,17 @@
   <main>
     <form id="connection">
       <label for="host">Browser gateway HTTPS address (default port 47990)</label>
-      <input id="host" type="url" placeholder="https://host.example:47990" required autocomplete="url">
+      <input id="host" name="host" type="url" placeholder="https://host.example:47990" required autocomplete="url" spellcheck="false">
       <button id="trust-host" type="button">Trust host certificate…</button>
       <label for="token">Access token</label>
-      <input id="token" type="password" required minlength="32" autocomplete="off" spellcheck="false">
+      <input id="token" name="token" type="password" required minlength="32" autocomplete="off" spellcheck="false">
       <label class="check-option"><input id="connect-fullscreen" type="checkbox"> Enter fullscreen before connecting</label>
       <button type="submit" id="connect">Connect</button>
     </form>
     <p id="status" role="status" aria-live="polite">Disconnected. Use a trusted HTTPS certificate on your host.</p>
+    <p id="handoff-recovery" hidden><a href="https://taducanh1605.github.io/espwake/">Return to ESPWake and open RemotePC again</a></p>
     <section id="stream-shell" aria-label="Remote stream" hidden>
-      <video id="screen" autoplay playsinline tabindex="0" aria-label="Remote desktop. Focus to send keyboard input."></video>
+      <video id="screen" autoplay muted playsinline tabindex="0" aria-label="Remote desktop. Focus to send keyboard input."></video>
       <details id="stream-tools" hidden>
         <summary aria-label="Remote controls" title="Remote controls"><span class="menu-icon" aria-hidden="true"><span></span><span></span><span></span></span></summary>
         <nav class="stream-menu-controls" aria-label="Remote controls">
@@ -118,6 +119,6 @@
       <p><a href="https://github.com/taducanh1605/remotepc/releases/latest" target="_blank" rel="noopener">Download Njk Host and Njk Stream releases</a></p>
     </details>
   </main>
-  <script type="module" src="./app.js?v=20261108-auth3"></script>
+  <script type="module" src="./app.js?v=20261108-auth4"></script>
 </body>
 </html>
