@@ -7,6 +7,7 @@ import {
   pointerPosition,
   requestFullscreenInGesture,
   viewportDimensions,
+  visibleViewport,
 } from "./protocol.mjs";
 import { installImmersive } from "./immersive.mjs";
 
@@ -22,7 +23,9 @@ let composingText = false;
 let committedComposition;
 let keyboardVisible = false;
 let lastDimensions;
-let micChannel, micStream, micContext, trustPopup, trustOrigin;
+let micChannel, micStream, micContext, trustPopup, trustOrigin, trustNonce, trustTimer;
+let stopPromise;
+let focusRequest = 0, pendingFocus = 0, focusTimer;
 const contactGenerations = new Map();
 const activePointers = new Map();
 const pendingMotions = new Map();
@@ -32,7 +35,18 @@ let pingSequence = 0;
 let lastRttAt = 0;
 let motionSequence = 0;
 const status = (text) => { $("status").textContent = $("stream-status").textContent = text; };
-const dimensions = () => viewportDimensions(window.visualViewport || { width: innerWidth, height: innerHeight }, devicePixelRatio);
+const viewport = () => visibleViewport(window.visualViewport, { width: innerWidth, height: innerHeight }, navigator.virtualKeyboard?.boundingRect);
+const dimensions = () => viewportDimensions(viewport(), 1);
+try {
+  const saved = localStorage.getItem("njk-host-origin");
+  if (saved) $("host").value = new URL(hostEndpoint(saved)).origin;
+} catch (error) { console.warn("Host address could not be restored:", error.message); }
+function saveHost() {
+  const origin = new URL(hostEndpoint($("host").value)).origin;
+  try { localStorage.setItem("njk-host-origin", origin); }
+  catch (error) { status(`Host address could not be saved: ${error.message}`); }
+  return origin;
+}
 const send = (message) => {
   if (channel?.readyState !== "open") return;
   if (channel.bufferedAmount >= 65536) {
@@ -63,11 +77,18 @@ function setKeyboard(visible) {
 }
 const immersive = installImmersive({ send, sendMotion, release, screen, setKeyboard, available: () => channel?.readyState === "open" });
 
-async function stop(notify = true) {
+function stop(notify = true) {
+  if (stopPromise) return stopPromise;
+  stopPromise = stopSession(notify).finally(() => { stopPromise = undefined; });
+  return stopPromise;
+}
+async function stopSession(notify) {
   ++generation;
   clearTimeout(resizeTimer);
   clearInterval(statsTimer);
   clearInterval(latencyTimer);
+  clearTimeout(focusTimer);
+  pendingFocus = 0;
   release();
   setKeyboard(false);
   await immersive.disconnected();
@@ -91,6 +112,8 @@ async function stop(notify = true) {
   $("connect").disabled = false;
   $("disconnect").disabled = $("fullscreen").disabled = true;
   $("microphone").disabled = true;
+  $("apply-quality").disabled = true;
+  $("exit-quit").disabled = true;
   $("latency").textContent = "Control RTT: measuring…";
   capabilities = { touch: false, pen: false };
   queuePosition = 0;
@@ -117,6 +140,7 @@ $("connection").addEventListener("submit", async (event) => {
     await fullscreenRequest;
     if (!window.isSecureContext || !window.RTCPeerConnection) throw new Error("A secure browser with WebRTC is required.");
     endpoint = hostEndpoint($("host").value);
+    saveHost();
     token = $("token").value;
     if (token.length < 32) throw new Error("Access token must contain at least 32 characters.");
     $("token").value = "";
@@ -140,7 +164,12 @@ $("connection").addEventListener("submit", async (event) => {
           status(message.active ? "Your browser controls the stream; waiting for video frames…" : `Watching the shared stream; ${message.position} browser session(s) ahead for control.`);
         }
         if (message.type === "leadership") displayLeader = message.leader === true;
+        if (message.type === "quality" && message.fps && message.bitrateKbps) {
+          $("video-quality").textContent = `${message.fps} FPS · ${message.bitrateKbps} kbps`;
+        }
         if (message.type === "text-focus" && typeof message.editable === "boolean") {
+          if (message.request !== pendingFocus || !pendingFocus) return;
+          pendingFocus = 0;
           if (message.editable && activePointers.size === 0 && !keyboardVisible) setKeyboard(true);
         }
         if (message.success === false) status(`Host ${message.type} failed.`);
@@ -225,6 +254,12 @@ $("connection").addEventListener("submit", async (event) => {
       ? `Host input: ${capabilities.touch ? "multitouch" : "no multitouch"} · ${capabilities.pen ? "stylus pressure/tilt/eraser" : "no stylus input"}. Unsupported inputs are not converted to mouse.`
       : "Standalone gateway supports mouse input only; native multitouch and stylus are unavailable.";
     $("microphone").disabled = !answer.microphone;
+    $("apply-quality").disabled = answer.capabilities?.quality !== true;
+    $("exit-quit").disabled = answer.capabilities?.quit !== true;
+    if (answer.quality) {
+      $("stream-fps").value = String(answer.quality.fps);
+      $("video-quality").textContent = `${answer.quality.fps} FPS · ${answer.quality.bitrateKbps} kbps`;
+    }
     await peer.setRemoteDescription({ type: "answer", sdp: answer.sdp });
     $("connection").hidden = true;
     $("stream-shell").hidden = false;
@@ -254,7 +289,29 @@ $("connection").addEventListener("submit", async (event) => {
   }
 });
 
-$("disconnect").addEventListener("click", () => stop());
+const exitDialog = $("exit-dialog");
+$("disconnect").addEventListener("click", () => { release(); $("exit-error").textContent = ""; exitDialog.showModal(); });
+$("exit-cancel").addEventListener("click", () => exitDialog.close());
+async function leaveSession(quit) {
+  if (!endpoint || !sessionId) { exitDialog.close(); await stop(false); return; }
+  for (const id of ["exit-disconnect", "exit-quit"]) $(id).disabled = true;
+  try {
+    const response = await fetch(endpoint, { method: "DELETE", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ id: sessionId, quit }), cache: "no-store", signal: AbortSignal.timeout(15000) });
+    if (!response.ok) throw new Error(await response.text() || `Gateway error ${response.status}`);
+    exitDialog.close();
+    await stop(false);
+  } catch (error) { status(`Unable to ${quit ? "quit" : "disconnect"}: ${error.message}`); $("exit-error").textContent = error.message; }
+  finally { for (const id of ["exit-disconnect", "exit-quit"]) $(id).disabled = false; }
+}
+$("exit-disconnect").addEventListener("click", () => leaveSession(false));
+$("exit-quit").addEventListener("click", () => leaveSession(true));
+$("apply-quality").addEventListener("click", () => {
+  const fps = Number($("stream-fps").value), size = dimensions();
+  const bitrateKbps = $("stream-bitrate").value === "auto" ? Math.max(700, Math.min(5000, Math.floor(size.width * size.height * fps / 12000))) : Number($("stream-bitrate").value);
+  send({ type: "quality", fps, bitrateKbps });
+  $("video-quality").textContent = `Requested ${fps} FPS · ${bitrateKbps} kbps`;
+});
 function flushMotions() {
   motionFrame = undefined;
   const motions = [...pendingMotions.values()];
@@ -353,6 +410,8 @@ screen.addEventListener("pointerdown", (event) => {
     if (!capabilities.touch) return;
     if (!keyboardVisible) screen.focus({ preventScroll: true });
     screen.setPointerCapture(event.pointerId);
+    clearTimeout(focusTimer);
+    pendingFocus = 0;
     beginPointer(event, "touch");
     event.preventDefault();
     return;
@@ -397,7 +456,12 @@ screen.addEventListener("pointerup", (event) => {
   if (event.pointerType === "touch" && backend === "native-host") {
     endPointer(event, "touch");
     const position = pointerPosition(event, screen);
-    if (position && activePointers.size === 0) send({ type: "focus", ...position });
+    if (position && activePointers.size === 0) {
+      const request = ++focusRequest;
+      pendingFocus = request;
+      clearTimeout(focusTimer);
+      focusTimer = setTimeout(() => send({ type: "focus", request, ...position }), 150);
+    }
     if (screen.hasPointerCapture(event.pointerId)) screen.releasePointerCapture(event.pointerId);
     event.preventDefault();
     return;
@@ -446,9 +510,8 @@ $("remote-text").addEventListener("compositionend", (event) => {
 $("remote-text").addEventListener("input", () => { if (!composingText) $("remote-text").value = ""; });
 $("remote-text").addEventListener("blur", release);
 const resized = () => {
-  const viewport = window.visualViewport;
-  document.documentElement.style.setProperty("--viewport-height", `${viewport?.height || innerHeight}px`);
-  document.documentElement.style.setProperty("--viewport-top", `${viewport?.offsetTop || 0}px`);
+  document.documentElement.style.setProperty("--viewport-height", `${viewport().height}px`);
+  document.documentElement.style.setProperty("--viewport-top", "0px");
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
     const next = dimensions();
@@ -460,22 +523,46 @@ const resized = () => {
 };
 window.visualViewport?.addEventListener("resize", resized);
 window.visualViewport?.addEventListener("scroll", resized);
+navigator.virtualKeyboard?.addEventListener("geometrychange", resized);
 window.addEventListener("resize", resized);
 document.addEventListener("fullscreenchange", () => { release(); if (!document.fullscreenElement) navigator.keyboard?.unlock(); resized(); });
 window.addEventListener("pagehide", () => stop());
+window.addEventListener("beforeunload", event => {
+  if (!sessionId) return;
+  event.preventDefault();
+  event.returnValue = "";
+});
 function openTrustPage() {
   try {
-    const origin = new URL(hostEndpoint($("host").value)).origin;
+    const origin = saveHost();
     trustOrigin = origin;
-    trustPopup = window.open(`${origin}/trust`, "njk-host-certificate-trust", "popup,width=620,height=760");
+    trustNonce = crypto.randomUUID();
+    const url = `${origin}/trust?origin=${encodeURIComponent(location.origin)}&nonce=${trustNonce}`;
+    trustPopup = window.open(url, "njk-host-certificate-trust", "popup,width=620,height=760");
+    clearInterval(trustTimer);
+    const started = Date.now(), nonce = trustNonce;
+    trustTimer = setInterval(async () => {
+      if (Date.now() - started > 120000 || nonce !== trustNonce) { clearInterval(trustTimer); return; }
+      try {
+        const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(1500) });
+        if (response.ok && nonce === trustNonce) {
+          trustPopup?.close();
+          completeTrust();
+        }
+      } catch (error) { if (!isTransientNetworkError(error)) console.warn("Certificate check:", error.message); }
+    }, 2000);
     if (!trustPopup) status("Certificate window was blocked. Allow popups for this site and try again.");
     else status("In the host window, manually accept the browser certificate warning. Njk Stream never bypasses certificate checks.");
   } catch (error) { status(error.message); }
 }
 $("trust-host").addEventListener("click", openTrustPage);
+function completeTrust() {
+  clearInterval(trustTimer);
+  trustPopup = trustOrigin = trustNonce = undefined;
+  status("Host certificate accepted. You can now Connect.");
+}
 window.addEventListener("message", (event) => {
-  if (event.source !== trustPopup || event.origin !== trustOrigin || event.data?.type !== "njk-certificate-trusted") return;
-  trustPopup = trustOrigin = undefined;
-  status("Host certificate page loaded after your manual browser acceptance. Retry Connect; trust does not bypass TLS validation.");
+  if (event.source !== trustPopup || event.origin !== trustOrigin || event.data?.type !== "njk-certificate-trusted" || event.data.nonce !== trustNonce) return;
+  completeTrust();
 });
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch((error) => status(`Offline installation unavailable: ${error.message}`));
