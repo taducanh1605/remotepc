@@ -26,6 +26,8 @@ let lastDimensions;
 let micChannel, micStream, micContext, trustPopup, trustOrigin, trustNonce, trustTimer;
 let stopPromise;
 let remoteLaunch;
+let automaticConnection = false;
+let automaticFullscreenPending = false;
 let focusRequest = 0, pendingFocus = 0, focusTimer;
 const contactGenerations = new Map();
 const activePointers = new Map();
@@ -61,6 +63,7 @@ if (launchParameters.has("ticket")) {
     const ticket = launchParameters.get("ticket");
     if (!/^[a-f0-9]{32}$/.test(ticket || "")) throw new Error("Invalid ESP Wake connection ticket.");
     $("host").value = host;
+    $("connect-fullscreen").checked = true;
     remoteLaunch = { host, ticket };
   } catch (error) { status(error.message); }
 }
@@ -152,11 +155,20 @@ async function stopSession(notify) {
 
 $("connection").addEventListener("submit", async (event) => {
   event.preventDefault();
+  const automatic = automaticConnection;
+  automaticConnection = false;
   const fullscreenRequest = requestFullscreenInGesture(document.documentElement, $("connect-fullscreen").checked);
   $("connect").disabled = true;
   const attempt = ++generation;
   try {
-    await fullscreenRequest;
+    try {
+      await fullscreenRequest;
+      automaticFullscreenPending = false;
+    } catch (error) {
+      if (!automatic) throw error;
+      automaticFullscreenPending = true;
+      $("capture-status").textContent = `Fullscreen needs a screen tap: ${error.message}`;
+    }
     if (!window.isSecureContext || !window.RTCPeerConnection) throw new Error("A secure browser with WebRTC is required.");
     endpoint = hostEndpoint($("host").value);
     saveHost();
@@ -447,6 +459,10 @@ window.addEventListener("blur", release);
 document.addEventListener("visibilitychange", () => { if (document.hidden) release(); });
 screen.addEventListener("contextmenu", (event) => event.preventDefault());
 screen.addEventListener("pointerdown", (event) => {
+  if (automaticFullscreenPending) {
+    automaticFullscreenPending = false;
+    $("fullscreen").click();
+  }
   if (event.pointerType === "touch" && backend === "native-host") {
     if (!capabilities.touch) return;
     if (!keyboardVisible) screen.focus({ preventScroll: true });
@@ -620,6 +636,7 @@ async function connectFromESPWake() {
     const result = await response.json();
     if (typeof result.token !== "string" || result.token.length < 32) throw new Error("Host returned an invalid connection credential.");
     $("token").value = result.token;
+    automaticConnection = true;
     remoteLaunch = undefined;
     $("connection").requestSubmit();
   } catch (error) {
