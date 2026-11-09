@@ -53,7 +53,7 @@ const status = (text) => { $("status").textContent = $("stream-status").textCont
 const viewport = () => visibleViewport(window.visualViewport, { width: innerWidth, height: innerHeight }, navigator.virtualKeyboard?.boundingRect);
 const dimensions = () => {
   const size = viewport();
-  return viewportDimensions({ ...size, height: size.height - ($("keyboard-accessory").hidden ? 0 : 48) },
+  return viewportDimensions(size,
     $("stream-detail").value === "auto" ? window.devicePixelRatio || 1 : Number($("stream-detail").value));
 };
 function requestedQuality() {
@@ -141,8 +141,6 @@ function setKeyboard(visible, automatic = false) {
   keyboardVisible = visible;
   if (!visible) {
     accessory.release();
-    $("keyboard-accessory").hidden = true;
-    $("stream-shell").classList.remove("keyboard-open");
   }
   $("remote-text").hidden = false;
   $("remote-text").inputMode = visible || (changed && navigator.virtualKeyboard) ? "text" : "none";
@@ -203,8 +201,6 @@ function observeKeyboardGeometry() {
   const visible = explicitHeight > 0 || keyboardViewportHeight - height > Math.max(100, keyboardViewportHeight * .15);
   if (visible) keyboardObserved = true;
   else if (keyboardObserved) setKeyboard(false);
-  $("keyboard-accessory").hidden = !(keyboardVisible && visible);
-  $("stream-shell").classList.toggle("keyboard-open", keyboardVisible && visible);
 }
 function showKeyboard() {
   $("remote-text").focus({ preventScroll: true });
@@ -235,6 +231,9 @@ function scheduleFocusCheck() {
 }
 const immersive = installImmersive({ send, sendMotion, release, screen, setKeyboard, available: () => channel?.readyState === "open" });
 installFloatingMenu($("stream-tools"), $("stream-shell"), text => { $("capture-status").textContent = text; });
+$("stream-tools").querySelector("summary").addEventListener("pointerdown", event => {
+  if (keyboardVisible && document.activeElement === $("remote-text")) event.preventDefault();
+});
 const gamepads = installGamepads({ send, available: () => capabilities.gamepad && channel?.readyState === "open" && queuePosition === 0 && !document.hidden && document.hasFocus(),
   report: text => { $("gamepad-status").textContent = text; } });
 

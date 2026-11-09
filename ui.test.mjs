@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
+import { viewportDimensions } from "./protocol.mjs";
 
 const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
 const app = readFileSync(new URL("./app.js", import.meta.url), "utf8").replace(/\r\n/g, "\n");
@@ -40,6 +41,56 @@ test("stream has no permanent text bands and disconnect restores the connection 
   assert.match(app, /classList\.remove\("streaming"\)/);
   assert.match(app, /\$\("stream-shell"\)\.hidden = true/);
   assert.match(css, /object-position: center top/);
+});
+
+test("PWA extra keys belong to the floating menu independently of the OS keyboard", () => {
+  const menu = html.slice(html.indexOf('<details id="stream-tools"'), html.indexOf("</details>", html.indexOf('<details id="stream-tools"')));
+  assert.match(menu, /<div id="keyboard-accessory" role="group" aria-label="Remote keyboard extra keys">/);
+  for (const code of ["Escape", "Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "AltLeft", "ControlLeft", "ShiftLeft"]) {
+    assert.match(menu, new RegExp(`data-key="${code}"`));
+  }
+  assert.doesNotMatch(app, /\$\("keyboard-accessory"\)\.hidden|keyboard-open/);
+  assert.doesNotMatch(css, /#keyboard-accessory\s*\{[^}]*position:\s*absolute|#stream-shell\.keyboard-open/);
+  assert.match(css, /#keyboard-accessory\s*\{[^}]*grid-template-columns: repeat\(3/);
+});
+
+test("PWA resolution uses the entire usable viewport without a reserved accessory strip", () => {
+  const source = app.slice(app.indexOf("const dimensions ="), app.indexOf("function requestedQuality()"));
+  for (const height of [300, 500, 800]) {
+    const result = runInNewContext(`${source}; dimensions()`, {
+      viewport: () => ({ width: 400, height }), viewportDimensions,
+      $: id => {
+        assert.equal(id, "stream-detail", "menu visibility must not affect host dimensions");
+        return { value: "1" };
+      },
+    });
+    assert.equal(result.width, 400);
+    assert.equal(result.height, height);
+  }
+});
+
+test("opening the floating menu preserves the active mobile editor", () => {
+  const field = {}, handlers = {};
+  const context = {
+    keyboardVisible: true, document: { activeElement: field },
+    $: id => id === "remote-text" ? field : { querySelector: () => ({
+      addEventListener(type, handler) { handlers[type] = handler; },
+    }) },
+  };
+  runInNewContext(app.slice(app.indexOf('$("stream-tools").querySelector("summary").addEventListener'),
+    app.indexOf("const gamepads =")), context);
+  let prevented = false;
+  const event = { preventDefault() { prevented = true; } };
+  handlers.pointerdown(event);
+  assert.equal(prevented, true);
+  context.keyboardVisible = false;
+  prevented = false;
+  handlers.pointerdown(event);
+  assert.equal(prevented, false);
+  context.keyboardVisible = true;
+  context.document.activeElement = {};
+  handlers.pointerdown(event);
+  assert.equal(prevented, false);
 });
 
 test("keyboard retains focus across host focus messages and viewport resizing", () => {
@@ -125,8 +176,7 @@ test("manual virtual keyboard primes text during the gesture and resets after OS
     blur() { events.push(["blur"]); context.document.activeElement = null; },
     focus() { events.push(["focus", this.inputMode, this.attributes.virtualkeyboardpolicy]); context.document.activeElement = field; } };
   const nodes = { "remote-text": field, "remote-text-label": {}, "remote-text-help": {},
-    "soft-keyboard": { setAttribute() {} }, "keyboard-status": {},
-    "keyboard-accessory": { hidden: true }, "stream-shell": { classList: { remove() {}, toggle() {} } } };
+    "soft-keyboard": { setAttribute() {} }, "keyboard-status": {} };
   const frames = [];
   const context = { keyboardVisible: false, keyboardObserved: false, keyboardViewportHeight: 0, keyboardViewportWidth: 0,
     requestAnimationFrame: callback => frames.push(callback), accessory: { release() {} },
@@ -150,13 +200,11 @@ test("manual virtual keyboard primes text during the gesture and resets after OS
   context.window.visualViewport.height = 500;
   context.observeKeyboardGeometry();
   assert.equal(context.keyboardObserved, true);
-  assert.equal(nodes["keyboard-accessory"].hidden, false);
   context.pendingFocus = 7;
   context.navigator.virtualKeyboard.boundingRect.height = 0;
   context.window.visualViewport.height = 800;
   context.observeKeyboardGeometry();
   assert.equal(context.keyboardVisible, false);
-  assert.equal(nodes["keyboard-accessory"].hidden, true);
   assert.equal(context.pendingFocus, 0);
   while (frames.length) frames.shift()();
   const showCount = events.filter(([name]) => name === "show").length;
