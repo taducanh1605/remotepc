@@ -26,8 +26,10 @@ let capabilities = { touch: false, pen: false };
 let composingText = false;
 let committedComposition;
 let keyboardVisible = false;
+let keyboardObserved = false;
+let keyboardViewportHeight = 0, keyboardViewportWidth = 0;
 let lastDimensions;
-let micChannel, micStream, micContext, trustPopup, trustOrigin, trustNonce, trustTimer;
+let micChannel, micStream, micContext, trustPopup, trustOrigin, trustNonce, trustTimer, verifiedTrustOrigin;
 let stopPromise;
 let remoteLaunch;
 let returnToESPWake = false, handoffOpener, handoffBroker, handoffNonce, handoffRefreshDeadline;
@@ -90,6 +92,7 @@ if (launchParameters.has("ticket")) {
     $("connect-fullscreen").checked = true;
     remoteLaunch = { host, ticket };
     remoteLaunch.prepared = launchParameters.get("prepared") === "1";
+    remoteLaunch.profileId = launchParameters.get("profileId") || undefined;
     viewerId = launchParameters.get("clientId") || undefined;
     if (viewerId && !/^[a-f0-9]{32}$/.test(viewerId)) throw new Error("Invalid remote device identity.");
     returnInSameWindow = launchParameters.get("sameWindow") === "1";
@@ -123,22 +126,68 @@ const release = () => {
   motionFrame = undefined;
   send({ type: "release" });
 };
+if (navigator.virtualKeyboard) navigator.virtualKeyboard.overlaysContent = true;
 function setKeyboard(visible, automatic = false) {
   const changed = keyboardVisible !== visible;
   keyboardVisible = visible;
   $("remote-text").hidden = false;
-  $("remote-text").inputMode = visible ? "text" : "none";
-  $("remote-text").setAttribute("virtualkeyboardpolicy", visible ? "auto" : "manual");
+  $("remote-text").inputMode = visible || (changed && navigator.virtualKeyboard) ? "text" : "none";
+  $("remote-text").setAttribute("virtualkeyboardpolicy", navigator.virtualKeyboard ? "manual" : "auto");
   $("remote-text-label").hidden = $("remote-text-help").hidden = !visible;
   $("soft-keyboard").setAttribute("aria-pressed", String(visible));
   $("soft-keyboard").setAttribute("data-keyboard-retry", String(visible && automatic));
   if (visible) {
-    if (changed && document.activeElement === $("remote-text")) $("remote-text").blur();
+    if (changed && !navigator.virtualKeyboard && document.activeElement === $("remote-text")) $("remote-text").blur();
     showKeyboard();
   } else {
-    navigator.virtualKeyboard?.hide();
-    $("remote-text").blur();
+    keyboardObserved = false;
+    clearTimeout(focusTimer);
+    pendingFocus = 0;
+    const blur = () => {
+      if (keyboardVisible) return;
+      $("remote-text").inputMode = "none";
+      $("remote-text").blur();
+    };
+    if (changed && navigator.virtualKeyboard) {
+      $("remote-text").focus({ preventScroll: true });
+      // Android must process the no-keyboard policy while the editor still
+      // has focus; blurring in the same frame can discard the hide request.
+      requestAnimationFrame(() => {
+        if (keyboardVisible) return;
+        navigator.virtualKeyboard.hide();
+        $("remote-text").inputMode = "none";
+        $("remote-text").setAttribute("virtualkeyboardpolicy", "auto");
+        requestAnimationFrame(blur);
+      });
+    } else blur();
   }
+}
+function primeKeyboardGesture() {
+  if (keyboardVisible) return;
+  const field = $("remote-text");
+  field.hidden = false;
+  // Chromium can show a manually controlled keyboard after the host reply,
+  // provided the text field was focused with a text input mode in the gesture.
+  field.inputMode = navigator.virtualKeyboard ? "text" : "none";
+  field.setAttribute("virtualkeyboardpolicy", "manual");
+  field.focus({ preventScroll: true });
+}
+function observeKeyboardGeometry() {
+  const viewport = window.visualViewport;
+  const height = viewport?.height ?? innerHeight;
+  const width = viewport?.width ?? innerWidth;
+  const explicitHeight = navigator.virtualKeyboard?.boundingRect?.height;
+  if (!keyboardViewportHeight || Math.abs(width - keyboardViewportWidth) > 80) {
+    keyboardViewportHeight = height;
+    keyboardViewportWidth = width;
+  }
+  if (!keyboardVisible) {
+    keyboardViewportHeight = Math.max(keyboardViewportHeight, height);
+    return;
+  }
+  const visible = explicitHeight > 0 || keyboardViewportHeight - height > Math.max(100, keyboardViewportHeight * .15);
+  if (visible) keyboardObserved = true;
+  else if (keyboardObserved) setKeyboard(false);
 }
 function showKeyboard() {
   $("remote-text").focus({ preventScroll: true });
@@ -185,7 +234,7 @@ async function stopSession(notify) {
   lastDimensions = undefined;
   composingText = false;
   committedComposition = undefined;
-  $("remote-text").value = "";
+  $("remote-text").textContent = "";
   navigator.keyboard?.unlock();
   $("connection").hidden = false;
   $("connect").disabled = false;
@@ -282,8 +331,8 @@ $("connection").addEventListener("submit", async (event) => {
           pendingFocus = 0;
           $("keyboard-status").textContent = message.editable ? "Host text field focused." : "";
           if (message.editable && activePointers.size === 0 && !keyboardVisible) setKeyboard(true, true);
-          if (!message.editable && !keyboardVisible) {
-            $("remote-text").blur();
+          if (!message.editable) {
+            setKeyboard(false);
             screen.focus({ preventScroll: true });
           }
         }
@@ -592,12 +641,7 @@ screen.addEventListener("pointerdown", (event) => {
   }
   if (event.pointerType === "touch" && backend === "native-host") {
     if (!capabilities.touch) return;
-    if (!keyboardVisible) {
-      $("remote-text").hidden = false;
-      $("remote-text").inputMode = "none";
-      $("remote-text").setAttribute("virtualkeyboardpolicy", "manual");
-      $("remote-text").focus({ preventScroll: true });
-    }
+    primeKeyboardGesture();
     screen.setPointerCapture(event.pointerId);
     clearTimeout(focusTimer);
     pendingFocus = 0;
@@ -644,7 +688,6 @@ screen.addEventListener("pointermove", (event) => {
 screen.addEventListener("pointerup", (event) => {
   if (event.pointerType === "touch" && backend === "native-host") {
     endPointer(event, "touch");
-    if (keyboardVisible) showKeyboard();
     const position = pointerPosition(event, screen);
     if (position && activePointers.size === 0) {
       const request = ++focusRequest;
@@ -697,13 +740,13 @@ $("remote-text").addEventListener("compositionend", (event) => {
   composingText = false;
   committedComposition = event.data;
   if (event.data) typingMessages(event.data, $("typing-mode").value).forEach(send);
-  setTimeout(() => { committedComposition = undefined; $("remote-text").value = ""; }, 0);
+  setTimeout(() => { committedComposition = undefined; $("remote-text").textContent = ""; }, 0);
 });
 $("remote-text").addEventListener("input", () => {
   if (composingText) return;
-  const text = $("remote-text").value;
+  const text = $("remote-text").textContent;
   if (text && text !== committedComposition) typingMessages(text, $("typing-mode").value).forEach(send);
-  $("remote-text").value = "";
+  $("remote-text").textContent = "";
 });
 $("remote-text").addEventListener("keydown", event => {
   if (event.isComposing || event.key === "Unidentified" || !event.code || event.key === "Process") return;
@@ -717,6 +760,7 @@ $("remote-text").addEventListener("keyup", event => {
 });
 $("remote-text").addEventListener("blur", release);
 const resized = () => {
+  observeKeyboardGeometry();
   document.documentElement.style.setProperty("--viewport-height", `${viewport().height}px`);
   document.documentElement.style.setProperty("--viewport-top", "0px");
   clearTimeout(resizeTimer);
@@ -755,92 +799,147 @@ function openTrustPage() {
     const url = `${origin}/trust?origin=${encodeURIComponent(location.origin)}&nonce=${trustNonce}`;
     trustPopup = window.open(url, "njk-host-certificate-trust", "popup,width=620,height=760");
     clearInterval(trustTimer);
-    const started = Date.now(), nonce = trustNonce;
+    const nonce = trustNonce;
     trustTimer = setInterval(async () => {
-      if (Date.now() - started > 120000 || nonce !== trustNonce) { clearInterval(trustTimer); return; }
+      if (nonce !== trustNonce) return;
       try {
         const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(1500) });
-        if (response.ok && nonce === trustNonce) {
+        if (response.ok && response.url === url && new URL(response.url).origin === origin && nonce === trustNonce) {
           trustPopup?.close();
-          completeTrust();
+          completeTrust(origin, nonce);
         }
-      } catch (error) { if (!isTransientNetworkError(error)) console.warn("Certificate check:", error.message); }
+      } catch {}
     }, 2000);
-    if (!trustPopup) status("Certificate window was blocked. Allow popups for this site and try again.");
-    else status("In the host window, manually accept the browser certificate warning. Njk Stream never bypasses certificate checks.");
+    if (!trustPopup) status("Certificate window was blocked. Click “Trust host certificate…” to open it. The original failure may be TLS, CORS, or network; accept only a valid browser certificate warning, and check DNS, firewall, port 47990, and the gateway origin allowlist if no warning appears.");
+    else status("The browser cannot distinguish an untrusted certificate from CORS or network failure. If a certificate warning appears, verify the host name and accept it manually; a verified response will retry RemotePC automatically. If no warning appears, check DNS, network/firewall, port 47990, and the gateway's PWA-origin allowlist.");
   } catch (error) { status(error.message); }
 }
 $("trust-host").addEventListener("click", openTrustPage);
-function completeTrust() {
+function completeTrust(origin, nonce) {
+  if (origin !== trustOrigin || nonce !== trustNonce) return;
+  verifiedTrustOrigin = origin;
   clearInterval(trustTimer);
   trustPopup = trustOrigin = trustNonce = undefined;
-  status("Host certificate accepted. You can now Connect.");
+  status(remoteLaunch ? "Host certificate acceptance verified. Retrying RemotePC connection…" : "Host certificate acceptance verified. You can now Connect.");
   if (remoteLaunch) connectFromESPWake();
 }
-window.addEventListener("message", (event) => {
-  if (event.source !== trustPopup || event.origin !== trustOrigin || event.data?.type !== "njk-certificate-trusted" || event.data.nonce !== trustNonce) return;
-  completeTrust();
-});
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch((error) => status(`Offline installation unavailable: ${error.message}`));
+async function requestFreshHandoffTicket() {
+  handoffRefreshDeadline ||= Date.now() + 90000;
+  if (Date.now() >= handoffRefreshDeadline) throw new Error("Remote access could not refresh within 90 seconds. Check the Windows helper and gateway.");
+  status("Access expired. Getting a fresh ticket from ESPWake…");
+  if (remoteLaunch.profileId && returnInSameWindow && !handoffOpener) {
+    return requestSavedESPWakeTicket();
+  }
+  const data = await new Promise((resolve, reject) => {
+    let settled = false, retry, progress;
+    const started = Date.now();
+    const cleanup = () => {
+      settled = true;
+      clearTimeout(retry);
+      clearTimeout(progress);
+      window.removeEventListener("message", receive);
+      handoffBroker?.removeEventListener("message", receiveBroadcast);
+    };
+    const timeout = setTimeout(() => { cleanup(); reject(new Error("ESPWake did not provide fresh access. Return to ESPWake, keep it visible, and open RemotePC again. Check the Windows helper if this repeats.")); }, Math.min(30000, handoffRefreshDeadline - Date.now()));
+    function accept(data) {
+      if (data?.nonce !== handoffNonce || data.type !== "njk-fresh-ticket") return;
+      clearTimeout(timeout);
+      cleanup();
+      if (data.error) reject(new Error(data.error));
+      else resolve(data);
+    }
+    function receive(event) {
+      if (event.source !== handoffOpener || event.origin !== location.origin) return;
+      accept(event.data);
+    }
+    function receiveBroadcast(event) { accept(event.data); }
+    window.addEventListener("message", receive);
+    const request = { type: "njk-refresh-ticket", nonce: handoffNonce };
+    handoffBroker?.addEventListener("message", receiveBroadcast);
+    function requestTicket() {
+      if (settled) return;
+      handoffBroker?.postMessage(request);
+      if (!settled) handoffOpener?.postMessage(request, location.origin);
+      if (!settled) retry = setTimeout(requestTicket, 3000);
+    }
+    function showProgress() {
+      if (settled) return;
+      status(`Getting fresh access from ESPWake (${Math.floor((Date.now() - started) / 1000)} s). Keep ESPWake visible; return there if it no longer has this connection open.`);
+      progress = setTimeout(showProgress, 1000);
+    }
+    requestTicket();
+    if (!settled) progress = setTimeout(showProgress, 1000);
+  });
+  if (data.host !== remoteLaunch.host || !/^[a-f0-9]{32}$/.test(data.ticket || "")) throw new Error("ESPWake returned an invalid replacement ticket.");
+  return data;
+}
+
+async function requestSavedESPWakeTicket() {
+  const origin = "https://taducanh1605.github.io";
+  if (location.origin !== origin || !["/remotepc/", "/remotepc/index.html"].includes(location.pathname) ||
+      !/^[a-zA-Z0-9_-]{1,128}$/.test(remoteLaunch.profileId || "") || !handoffNonce || handoffNonce.length > 128) {
+    throw new Error("Automatic ESPWake recovery is unavailable in this context. Return to ESPWake and unlock the selected computer.");
+  }
+  const frame = document.createElement("iframe");
+  frame.hidden = true;
+  frame.title = "ESPWake access recovery";
+  frame.src = `${origin}/espwake/#${new URLSearchParams({
+    broker: "1", nonce: handoffNonce, profileId: remoteLaunch.profileId, host: remoteLaunch.host,
+  })}`;
+  return new Promise((resolve, reject) => {
+    const cleanup = () => { clearTimeout(timeout); window.removeEventListener("message", receive); frame.remove(); };
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error("Saved ESPWake access could not be restored. Unlock the selected computer in ESPWake and check its connection."));
+    }, 30000);
+    function receive(event) {
+      if (event.source !== frame.contentWindow || event.origin !== origin || event.data?.nonce !== handoffNonce) return;
+      if (event.data.type === "njk-broker-ready") {
+        frame.contentWindow.postMessage({ type: "njk-refresh-ticket", nonce: handoffNonce }, origin);
+      } else if (event.data.type === "njk-fresh-ticket") {
+        cleanup();
+        if (event.data.error) reject(new Error(event.data.error));
+        else if (event.data.host !== remoteLaunch.host || !/^[a-f0-9]{32}$/.test(event.data.ticket || "")) {
+          reject(new Error("Saved ESPWake access returned an invalid or mismatched ticket."));
+        } else resolve({ host: event.data.host, ticket: event.data.ticket });
+      }
+    }
+    window.addEventListener("message", receive);
+    document.body.appendChild(frame);
+  });
+}
 async function connectFromESPWake() {
   if (!remoteLaunch || handoffConnecting) return;
   handoffConnecting = true;
   try {
+    if (!remoteLaunch.prepared) {
+      const prepared = await fetch(`${remoteLaunch.host}/api/connect-prepare`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticket: remoteLaunch.ticket }),
+        cache: "no-store", signal: AbortSignal.timeout(10000),
+      });
+      if (prepared.status === 401 && (handoffOpener || handoffBroker || remoteLaunch.profileId)) {
+        const data = await requestFreshHandoffTicket();
+        remoteLaunch.ticket = data.ticket;
+        await new Promise(resolve => setTimeout(resolve, 2500));
+        handoffConnecting = false;
+        return connectFromESPWake();
+      }
+      if (!prepared.ok) {
+        if (prepared.status === 401) throw new Error("ESP Wake access expired before the host could prepare it. Return to ESPWake and open RemotePC again.");
+        throw new Error(`Host access preparation failed (${prepared.status}). Check the gateway version and its exact PWA-origin allowlist.`);
+      }
+      const result = await prepared.json();
+      if (!/^[a-f0-9]{32}$/.test(result.ticket || "") || result.expiresIn < 120) throw new Error("Host returned invalid prepared access.");
+      remoteLaunch.ticket = result.ticket;
+      remoteLaunch.prepared = true;
+    }
     const response = await fetch(`${remoteLaunch.host}/api/connect`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ticket: remoteLaunch.ticket }),
       cache: "no-store", signal: AbortSignal.timeout(10000),
     });
-    if (response.status === 401 && !remoteLaunch.prepared && (handoffOpener || handoffBroker)) {
-      handoffRefreshDeadline ||= Date.now() + 90000;
-      if (Date.now() >= handoffRefreshDeadline) throw new Error("Remote access could not refresh within 90 seconds. Check the Windows helper and gateway.");
-      status("Access expired. Getting a fresh ticket from ESPWake…");
-      const data = await new Promise((resolve, reject) => {
-        let settled = false, retry, progress;
-        const started = Date.now();
-        const cleanup = () => {
-          settled = true;
-          clearTimeout(retry);
-          clearTimeout(progress);
-          window.removeEventListener("message", receive);
-          handoffBroker?.removeEventListener("message", receiveBroadcast);
-        };
-        const timeout = setTimeout(() => { cleanup(); reject(new Error("ESPWake did not provide fresh access. Return to ESPWake, keep it visible, and open RemotePC again. Check the Windows helper if this repeats.")); }, Math.min(30000, handoffRefreshDeadline - Date.now()));
-        function accept(data) {
-          if (data?.nonce !== handoffNonce || data.type !== "njk-fresh-ticket") return;
-          clearTimeout(timeout);
-          cleanup();
-          if (data.error) reject(new Error(data.error));
-          else resolve(data);
-        }
-        function receive(event) {
-          if (event.source !== handoffOpener || event.origin !== location.origin) return;
-          accept(event.data);
-        }
-        function receiveBroadcast(event) { accept(event.data); }
-        window.addEventListener("message", receive);
-        const request = { type: "njk-refresh-ticket", nonce: handoffNonce };
-        handoffBroker?.addEventListener("message", receiveBroadcast);
-        function requestTicket() {
-          if (settled) return;
-          handoffBroker?.postMessage(request);
-          if (!settled) handoffOpener?.postMessage(request, location.origin);
-          if (!settled) retry = setTimeout(requestTicket, 3000);
-        }
-        function showProgress() {
-          if (settled) return;
-          status(`Getting fresh access from ESPWake (${Math.floor((Date.now() - started) / 1000)} s). Keep ESPWake visible; return there if it no longer has this connection open.`);
-          progress = setTimeout(showProgress, 1000);
-        }
-        requestTicket();
-        if (!settled) progress = setTimeout(showProgress, 1000);
-      });
-      if (data.host !== remoteLaunch.host || !/^[a-f0-9]{32}$/.test(data.ticket || "")) throw new Error("ESPWake returned an invalid replacement ticket.");
-      remoteLaunch.ticket = data.ticket;
-      await new Promise(resolve => setTimeout(resolve, 2500));
-      handoffConnecting = false;
-      return connectFromESPWake();
-    }
     if (!response.ok) throw new Error(`Host authorization failed (${response.status}). ${await response.text()}`);
     const result = await response.json();
     if (typeof result.token !== "string" || result.token.length < 32) throw new Error("Host returned an invalid connection credential.");
@@ -856,8 +955,12 @@ async function connectFromESPWake() {
     $("connection").requestSubmit();
   } catch (error) {
     if (isTransientNetworkError(error)) {
-      status("ESP Wake connection needs host certificate approval. Open the host security check; connection will resume after approval.");
-      openTrustPage();
+      if (verifiedTrustOrigin === remoteLaunch?.host) {
+        status("Host TLS is verified, but the browser still cannot access the gateway. Check network/firewall, port 47990, and the gateway's exact PWA-origin CORS allowlist; retry after fixing access.");
+      } else {
+        status("The browser could not complete host access. This may be an untrusted certificate, CORS/origin policy, or network failure. The security window will not bypass browser warnings; verified certificate acceptance retries RemotePC automatically.");
+        openTrustPage();
+      }
     } else {
       remoteLaunch = undefined;
       handoffBroker?.postMessage({ type: "njk-handoff-complete", nonce: handoffNonce });

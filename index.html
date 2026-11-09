@@ -69,8 +69,8 @@
         <p id="stream-status" role="status" aria-live="polite"></p>
         </nav>
       </details>
-    <label for="remote-text" id="remote-text-label" hidden>Remote text input</label>
-    <textarea id="remote-text" hidden rows="1" inputmode="none" virtualkeyboardpolicy="manual" tabindex="-1" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Remote keyboard input" aria-describedby="remote-text-help"></textarea>
+    <span id="remote-text-label" hidden>Remote text input</span>
+    <div id="remote-text" hidden contenteditable="true" role="textbox" aria-multiline="true" inputmode="none" virtualkeyboardpolicy="manual" tabindex="-1" autocapitalize="off" spellcheck="false" aria-label="Remote keyboard input" aria-describedby="remote-text-help"></div>
     <p id="remote-text-help" hidden>Text is sent to the focused host control. Tap Keyboard to open or close the phone keyboard manually; automatic opening requires host editable-focus confirmation and browser support.</p>
       <dialog id="exit-dialog" aria-labelledby="exit-title">
         <h2 id="exit-title">Leave the stream?</h2>
@@ -119,6 +119,6 @@
       <p><a href="https://github.com/taducanh1605/remotepc/releases/latest" target="_blank" rel="noopener">Download Njk Host and Njk Stream releases</a></p>
     </details>
   </main>
-  <script type="module" src="./app.js?v=20261108-keyboard7"></script>
+  <script type="module" src="./app.js?v=20261109-keyboard7"></script>
 </body>
 </html>
