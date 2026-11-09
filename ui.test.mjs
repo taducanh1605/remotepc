@@ -66,6 +66,57 @@ test("automatic IME requires another tap of the same identified host editor", ()
   assert.equal(reply("0"), false);
 });
 
+test("focus monitoring hides on blur without arming editors or reopening a dismissed keyboard", () => {
+  const timers = new Map(), sent = [], keyboard = [], status = {};
+  let nextTimer = 0;
+  const context = { lastTextFocusIdentity: "123", keyboardVisible: true, backend: "native-host",
+    channel: { readyState: "open" }, activePointers: new Map(), pendingFocus: 0,
+    pendingFocusCheck: 0, focusRequest: 0, focusCheckTimer: undefined,
+    setTimeout(callback, delay) { const id = ++nextTimer; timers.set(id, {callback, delay}); return id; },
+    clearTimeout(id) { timers.delete(id); }, send: message => sent.push(message),
+    setKeyboard(visible) { keyboard.push(visible); context.keyboardVisible = visible; },
+    screen: { focus() { throw new Error("Video focus would cancel the pending Android IME hide"); } }, $: () => status };
+  const functions = app.slice(app.indexOf("function acceptTextFocus("), app.indexOf("const immersive ="));
+  const handler = app.slice(app.indexOf('if (message.type === "text-focus"'), app.indexOf('if (message.type === "gamepad")'));
+  runInNewContext(functions + "\nfunction receiveFocus(message) {" + handler + "}", context);
+  context.scheduleFocusCheck();
+  assert.equal(timers.get(context.focusCheckTimer).delay, 500);
+  timers.get(context.focusCheckTimer).callback();
+  assert.equal(sent[0].type, "focus-check");
+  assert.equal(context.pendingFocusCheck, 1);
+  const check = (request, editable, focusId) => context.receiveFocus({
+    type: "text-focus", checkOnly: true, request, editable, focusId
+  });
+  check(99, false, "");
+  assert.equal(keyboard.length, 0, "stale replies cannot dismiss IME");
+  check(1, true, "456");
+  assert.equal(context.lastTextFocusIdentity, "", "passive checks never arm a different editor");
+  assert.equal(keyboard.length, 0);
+  context.keyboardVisible = false;
+  context.pendingFocusCheck = 2;
+  check(2, true, "456");
+  assert.equal(context.keyboardVisible, false, "positive polling cannot undo OS dismissal");
+  context.lastTextFocusIdentity = "456";
+  context.keyboardVisible = true;
+  context.pendingFocusCheck = 3;
+  check(3, false, "");
+  assert.deepEqual(keyboard, [false]);
+  assert.equal(context.lastTextFocusIdentity, "");
+  assert.equal(timers.has(context.focusCheckTimer), false, "stop polling after focus loss");
+  context.lastTextFocusIdentity = "789";
+  context.scheduleFocusCheck();
+  timers.get(context.focusCheckTimer).callback();
+  timers.get(context.focusCheckTimer).callback();
+  assert.match(status.textContent, /monitoring timed out/);
+  assert.equal(context.pendingFocusCheck, 0);
+  assert.deepEqual(keyboard, [false], "timeout must not fabricate focus loss");
+  context.pendingFocus = 42;
+  assert.doesNotThrow(() => context.receiveFocus({
+    type: "text-focus", request: 42, editable: false, focusId: ""
+  }), "outside-tap reply must let setKeyboard finish hiding before changing focus");
+  assert.equal(keyboard.at(-1), false);
+});
+
 test("manual virtual keyboard primes text during the gesture and resets after OS dismissal", () => {
   assert.match(html, /<div id="remote-text"[^>]*contenteditable="true"[^>]*role="textbox"/);
   const events = [];
@@ -78,7 +129,8 @@ test("manual virtual keyboard primes text during the gesture and resets after OS
   const frames = [];
   const context = { keyboardVisible: false, keyboardObserved: false, keyboardViewportHeight: 0, keyboardViewportWidth: 0,
     requestAnimationFrame: callback => frames.push(callback),
-    pendingFocus: 0, focusTimer: undefined, clearTimeout() {}, innerHeight: 800, innerWidth: 400,
+    pendingFocus: 0, focusTimer: undefined, focusCheckTimer: undefined, lastTextFocusIdentity: "",
+    backend: "standalone", clearTimeout() {}, innerHeight: 800, innerWidth: 400,
     window: {visualViewport: {height: 800, width: 400}},
     $: id => nodes[id], document: { activeElement: field },
     navigator: { virtualKeyboard: { boundingRect: {height: 0}, show() { events.push(["show"]); },

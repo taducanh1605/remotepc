@@ -41,6 +41,7 @@ let automaticFullscreenPending = false;
 let focusRequest = 0, pendingFocus = 0, focusTimer;
 let lastTextFocusIdentity = "";
 let textTap;
+let pendingFocusCheck = 0, focusCheckTimer;
 const contactGenerations = new Map();
 const activePointers = new Map();
 const pendingMotions = new Map();
@@ -140,6 +141,7 @@ function setKeyboard(visible, automatic = false) {
   $("soft-keyboard").setAttribute("aria-pressed", String(visible));
   $("soft-keyboard").setAttribute("data-keyboard-retry", String(visible && automatic));
   if (visible) {
+    scheduleFocusCheck();
     if (changed && !navigator.virtualKeyboard && document.activeElement === $("remote-text")) $("remote-text").blur();
     showKeyboard();
   } else {
@@ -203,6 +205,22 @@ function acceptTextFocus(message) {
   lastTextFocusIdentity = identity;
   return repeated;
 }
+function scheduleFocusCheck() {
+  clearTimeout(focusCheckTimer);
+  if ((!lastTextFocusIdentity && !keyboardVisible) || backend !== "native-host" || channel?.readyState !== "open") return;
+  focusCheckTimer = setTimeout(() => {
+    if (pendingFocus || activePointers.size) { scheduleFocusCheck(); return; }
+    const request = ++focusRequest;
+    pendingFocusCheck = request;
+    send({ type: "focus-check", request });
+    focusCheckTimer = setTimeout(() => {
+      if (pendingFocusCheck !== request) return;
+      pendingFocusCheck = 0;
+      $("keyboard-status").textContent = "Host focus monitoring timed out. Use Keyboard manually or reconnect to an updated Host.";
+      focusCheckTimer = setTimeout(scheduleFocusCheck, 2000);
+    }, 5000);
+  }, 500);
+}
 const immersive = installImmersive({ send, sendMotion, release, screen, setKeyboard, available: () => channel?.readyState === "open" });
 installFloatingMenu($("stream-tools"), $("stream-shell"), text => { $("capture-status").textContent = text; });
 const gamepads = installGamepads({ send, available: () => capabilities.gamepad && channel?.readyState === "open" && queuePosition === 0 && !document.hidden && document.hasFocus(),
@@ -215,6 +233,8 @@ function stop(notify = true) {
 }
 async function stopSession(notify) {
   lastTextFocusIdentity = "";
+  clearTimeout(focusCheckTimer);
+  pendingFocusCheck = 0;
   textTap = undefined;
   ++generation;
   clearTimeout(resizeTimer);
@@ -339,6 +359,18 @@ $("connection").addEventListener("submit", async (event) => {
             : "Desktop audio enabled for this viewer.";
         }
         if (message.type === "text-focus" && typeof message.editable === "boolean") {
+          if (message.checkOnly === true) {
+            if (!pendingFocusCheck || message.request !== pendingFocusCheck) return;
+            pendingFocusCheck = 0;
+            const identity = message.editable ? message.focusId : "";
+            if (identity !== lastTextFocusIdentity) lastTextFocusIdentity = "";
+            if (!message.editable) {
+              setKeyboard(false);
+              $("keyboard-status").textContent = "";
+            }
+            scheduleFocusCheck();
+            return;
+          }
           if (message.request !== pendingFocus || !pendingFocus) return;
           pendingFocus = 0;
           const repeated = acceptTextFocus(message);
@@ -346,8 +378,8 @@ $("connection").addEventListener("submit", async (event) => {
           if (repeated && activePointers.size === 0 && !keyboardVisible) setKeyboard(true, true);
           if (!message.editable) {
             setKeyboard(false);
-            screen.focus({ preventScroll: true });
           }
+          scheduleFocusCheck();
         }
         if (message.type === "gamepad") $("gamepad-status").textContent = message.success === false
           ? "Host could not allocate the virtual gamepad. Check the installed controller driver."
@@ -642,6 +674,8 @@ screen.addEventListener("keyup", (event) => {
 });
 screen.addEventListener("blur", release);
 const resetTextFocus = () => {
+  clearTimeout(focusCheckTimer);
+  pendingFocusCheck = 0;
   clearTimeout(focusTimer);
   pendingFocus = 0;
   lastTextFocusIdentity = "";
@@ -649,8 +683,8 @@ const resetTextFocus = () => {
 };
 window.addEventListener("blur", () => { resetTextFocus(); release(); });
 document.addEventListener("visibilitychange", () => { if (document.hidden) { resetTextFocus(); release(); } });
-window.addEventListener("focus", () => gamepads.resume());
-document.addEventListener("visibilitychange", () => { if (!document.hidden) gamepads.resume(); });
+window.addEventListener("focus", () => { gamepads.resume(); scheduleFocusCheck(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { gamepads.resume(); scheduleFocusCheck(); } });
 $("gamepad").addEventListener("change", () => { if ($("gamepad").checked) gamepads.start(); else gamepads.stop(); });
 screen.addEventListener("contextmenu", (event) => event.preventDefault());
 screen.addEventListener("pointerdown", (event) => {
@@ -664,6 +698,8 @@ screen.addEventListener("pointerdown", (event) => {
     screen.setPointerCapture(event.pointerId);
     clearTimeout(focusTimer);
     pendingFocus = 0;
+    clearTimeout(focusCheckTimer);
+    pendingFocusCheck = 0;
     if (activePointers.size === 0) textTap = { id: event.pointerId, x: event.clientX, y: event.clientY };
     else { textTap = undefined; lastTextFocusIdentity = ""; }
     beginPointer(event, "touch");
@@ -676,6 +712,8 @@ screen.addEventListener("pointerdown", (event) => {
     pendingFocus = 0;
     textTap = undefined;
     lastTextFocusIdentity = "";
+    clearTimeout(focusCheckTimer);
+    pendingFocusCheck = 0;
     if (!keyboardVisible) screen.focus({ preventScroll: true });
     screen.setPointerCapture(event.pointerId);
     beginPointer(event, "pen");
@@ -722,15 +760,26 @@ screen.addEventListener("pointerup", (event) => {
       const request = ++focusRequest;
       pendingFocus = request;
       clearTimeout(focusTimer);
-      focusTimer = setTimeout(() => send({ type: "focus", request, ...position }), 150);
+      focusTimer = setTimeout(() => {
+        send({ type: "focus", request, ...position });
+        focusTimer = setTimeout(() => {
+          if (pendingFocus !== request) return;
+          pendingFocus = 0;
+          lastTextFocusIdentity = "";
+          $("keyboard-status").textContent = "Host text focus request timed out. Tap the field again or use Keyboard manually.";
+          scheduleFocusCheck();
+        }, 5000);
+      }, 150);
     }
     textTap = undefined;
+    scheduleFocusCheck();
     if (screen.hasPointerCapture(event.pointerId)) screen.releasePointerCapture(event.pointerId);
     event.preventDefault();
     return;
   }
   if (event.pointerType === "pen" && backend === "native-host") {
     endPointer(event, "pen");
+    scheduleFocusCheck();
     if (screen.hasPointerCapture(event.pointerId)) screen.releasePointerCapture(event.pointerId);
     event.preventDefault();
     return;
@@ -745,6 +794,7 @@ screen.addEventListener("pointercancel", (event) => {
   if (event.pointerType === "touch") endPointer(event, "touch", "cancel");
   else if (event.pointerType === "pen") endPointer(event, "pen", "cancel");
   else release();
+  scheduleFocusCheck();
 });
 screen.addEventListener("lostpointercapture", (event) => {
   const contact = activePointers.get(event.pointerId);
