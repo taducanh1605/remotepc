@@ -372,6 +372,7 @@ test("ESP Wake selects fullscreen and automatically submits a redeemed host cred
   assert.equal(context.remoteLaunch, undefined);
   assert.deepEqual(context.requests.map(url => new URL(url).pathname), ["/api/connect-prepare", "/api/connect"]);
   assert.match(app, /\$\("connect-fullscreen"\)\.checked = true/);
+  assert.match(app, /immersive\.connected\(\{ autoEnter: \$\("connect-fullscreen"\)\.checked \}\)/);
 });
 
 test("prepared handoff is single-flight and needs no suspended ESPWake broker", async () => {
@@ -641,17 +642,15 @@ test("playback fallback, quality resize and temporary ICE interruption retain th
 
 test("fullscreen denial never prevents ESP Wake connection but remains an error for manual selection", async () => {
   const guard = app.slice(app.indexOf("    try {\n      await fullscreenRequest;"), app.indexOf('    if (!window.isSecureContext'));
-  assert.ok(guard.includes("automaticFullscreenPending = true"));
   for (const automatic of [true, false]) {
     const context = {
-      automatic, automaticFullscreenPending: false,
+      automatic,
       fullscreenRequest: Promise.reject(new Error("user activation required")),
       $: () => ({ textContent: "" }),
     };
     const result = runInNewContext(`(async () => { ${guard}; return true; })()`, context);
     if (automatic) {
       assert.equal(await result, true);
-      assert.equal(context.automaticFullscreenPending, true);
     } else await assert.rejects(result, /user activation required/);
   }
 });

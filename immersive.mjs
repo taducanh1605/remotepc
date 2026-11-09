@@ -14,8 +14,11 @@ export function installImmersive({ send, sendMotion = send, release, screen, ava
   const $ = id => document.getElementById(id);
   const shell = $("stream-shell");
   let pointer = { x: .5, y: .5 };
+  let fullscreenPending = false;
+  let entering = false;
   const report = text => { $("capture-status").textContent = text; };
   async function exit() {
+    fullscreenPending = false;
     release();
     navigator.keyboard?.unlock();
     if (document.pointerLockElement) document.exitPointerLock();
@@ -24,19 +27,29 @@ export function installImmersive({ send, sendMotion = send, release, screen, ava
     report("Input capture off; browser/OS shortcuts may remain reserved");
   }
   async function enter() {
-    if (!available()) return;
+    if (entering) return;
+    entering = true;
+    document.body.classList.add("immersive");
     try {
       if (!document.fullscreenElement) await shell.requestFullscreen();
-      document.body.classList.add("immersive");
+      fullscreenPending = false;
       if (document.activeElement !== $("remote-text")) screen.focus({ preventScroll: true });
       if (navigator.keyboard?.lock) {
         // Leave Escape unlocked so there is always a browser-provided exit.
         await navigator.keyboard.lock(["AltLeft", "AltRight", "Tab", "MetaLeft", "MetaRight", "ControlLeft", "ControlRight"]);
         report("Fullscreen · keyboard lock granted where supported · Escape exits");
       } else report("Fullscreen · keyboard lock unavailable · Escape exits");
-    } catch (error) { report(`Immersive request limited: ${error.message}. Use toolbar shortcuts.`); }
+    } catch (error) {
+      fullscreenPending = !document.fullscreenElement;
+      report(fullscreenPending
+        ? `Immersive mode active. Tap the stream to allow fullscreen: ${error.message}`
+        : `Keyboard capture limited: ${error.message}. Use toolbar shortcuts.`);
+    } finally { entering = false; }
   }
-  $("fullscreen").addEventListener("click", enter);
+  $("fullscreen").addEventListener("click", () => { if (available()) return enter(); });
+  shell.addEventListener("pointerdown", () => {
+    if (fullscreenPending && available()) enter();
+  }, { capture: true });
   $("exit-immersive").addEventListener("click", exit);
   $("pointer-lock").addEventListener("click", async () => {
     if (!available()) return;
@@ -85,6 +98,9 @@ export function installImmersive({ send, sendMotion = send, release, screen, ava
   });
   window.addEventListener("blur",release);
   document.addEventListener("visibilitychange",()=>{ if(document.hidden)release(); });
-  return { exit, connected:()=>{ $("stream-tools").hidden=false; },
+  return { exit, connected:({ autoEnter = false } = {})=>{
+    $("stream-tools").hidden=false;
+    if (autoEnter) return enter();
+  },
     disconnected:async()=>{ $("stream-tools").hidden=true; $("stream-tools").open=false; $("zoom").value=1; $("zoom-level").value="1×"; screen.style.transform=""; await exit(); } };
 }

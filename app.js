@@ -11,7 +11,7 @@ import {
   viewportDimensions,
   visibleViewport,
 } from "./protocol.mjs?v=20261109-viewport";
-import { installImmersive } from "./immersive.mjs?v=20261108-keyboard2";
+import { installImmersive } from "./immersive.mjs?v=20261109-autoimmersive";
 import { installGamepads } from "./gamepad.mjs?v=20261108-controls";
 import { installKeyboardAccessory } from "./keyboard-accessory.mjs?v=20261109-accessory";
 import { installFloatingMenu } from "./floating-menu.mjs?v=20261109-menu1";
@@ -37,7 +37,6 @@ let returnToESPWake = false, handoffOpener, handoffBroker, handoffNonce, handoff
 let automaticConnection = false;
 let handoffConnecting = false, connectionStarting = false;
 let viewerId, returnInSameWindow = false;
-let automaticFullscreenPending = false;
 let focusRequest = 0, pendingFocus = 0, focusTimer;
 let lastTextFocusIdentity = "";
 let textTap;
@@ -290,7 +289,6 @@ async function stopSession(notify) {
   $("latency").textContent = "Control RTT: measuring…";
   $("quality-request").textContent = "";
   $("audio-status").textContent = "";
-  automaticFullscreenPending = false;
   capabilities = { touch: false, pen: false };
   queuePosition = 0;
   displayLeader = false;
@@ -319,10 +317,8 @@ $("connection").addEventListener("submit", async (event) => {
   try {
     try {
       await fullscreenRequest;
-      automaticFullscreenPending = false;
     } catch (error) {
       if (!automatic) throw error;
-      automaticFullscreenPending = true;
       $("capture-status").textContent = `Fullscreen needs a screen tap: ${error.message}`;
     }
     if (!window.isSecureContext || !window.RTCPeerConnection) throw new Error("A secure browser with WebRTC is required.");
@@ -520,7 +516,7 @@ $("connection").addEventListener("submit", async (event) => {
     $("stream-shell").hidden = false;
     document.body.classList.add("streaming");
     resized();
-    immersive.connected();
+    immersive.connected({ autoEnter: $("connect-fullscreen").checked });
     $("disconnect").disabled = $("fullscreen").disabled = false;
     $("desktop-audio").disabled = false;
     status("WebRTC negotiated. Waiting for actual video frames…");
@@ -701,10 +697,6 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { ga
 $("gamepad").addEventListener("change", () => { if ($("gamepad").checked) gamepads.start(); else gamepads.stop(); });
 screen.addEventListener("contextmenu", (event) => event.preventDefault());
 screen.addEventListener("pointerdown", (event) => {
-  if (automaticFullscreenPending) {
-    automaticFullscreenPending = false;
-    $("fullscreen").click();
-  }
   if (event.pointerType === "touch" && backend === "native-host") {
     if (!capabilities.touch) return;
     primeKeyboardGesture();
