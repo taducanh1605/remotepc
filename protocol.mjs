@@ -35,7 +35,13 @@ export function visibleViewport(viewport, layout, keyboard) {
   const top = Math.max(0, viewport?.offsetTop || 0);
   const width = viewport?.width || layout.width;
   let height = Math.min(viewport?.height || layout.height, layout.height);
-  if (keyboard?.height > 0 && keyboard.y >= top) height = Math.min(height, keyboard.y - top);
+  if (keyboard?.height > 0) {
+    // Some Android Chrome versions report the system-bar inset as keyboard.y.
+    // Trust that origin only when the rectangle actually meets the window bottom.
+    const keyboardTop = Math.abs(keyboard.y + keyboard.height - layout.height) <= 2
+      ? keyboard.y : layout.height - keyboard.height;
+    height = Math.min(height, keyboardTop - top);
+  }
   return { width, height: Math.max(1, height) };
 }
 

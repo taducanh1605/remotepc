@@ -10,7 +10,7 @@ import {
   requestFullscreenInGesture,
   viewportDimensions,
   visibleViewport,
-} from "./protocol.mjs?v=20261108-playback";
+} from "./protocol.mjs?v=20261109-viewport";
 import { installImmersive } from "./immersive.mjs?v=20261108-keyboard2";
 import { installGamepads } from "./gamepad.mjs?v=20261108-controls";
 import { typingMessages } from "./typing.mjs?v=20261108-controls";
@@ -400,9 +400,9 @@ $("connection").addEventListener("submit", async (event) => {
       if (pc !== peer) return;
       clearTimeout(disconnectTimer);
       if (peer.connectionState === "disconnected") {
-        status("Network interrupted. Waiting up to 10 seconds for ICE to recover…");
+        status(captureFailure || "Network interrupted. Waiting up to 10 seconds for ICE to recover…");
         disconnectTimer = setTimeout(() => {
-          if (pc === peer && peer.connectionState === "disconnected") stop().then(() => status("Network did not recover. Reconnect when the host is reachable."));
+          if (pc === peer && peer.connectionState === "disconnected") stop().then(() => status(captureFailure || "Network did not recover. Reconnect when the host is reachable."));
         }, 10000);
       } else if (["failed", "closed"].includes(peer.connectionState)) {
         stop().then(() => status(captureFailure || "Connection lost. Check host DNS, network/firewall, trusted TLS certificate, and UDP/ICE or TURN configuration."));
