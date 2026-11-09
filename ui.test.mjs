@@ -45,10 +45,25 @@ test("stream has no permanent text bands and disconnect restores the connection 
 test("keyboard retains focus across host focus messages and viewport resizing", () => {
   assert.doesNotMatch(app, /hidden = !message\.editable/);
   assert.match(app, /message\.request !== pendingFocus/);
-  assert.match(app, /message\.editable && activePointers\.size === 0 && !keyboardVisible/);
+  assert.match(app, /repeated && activePointers\.size === 0 && !keyboardVisible/);
   assert.match(app, /if \(!keyboardVisible\) screen\.focus\(\{ preventScroll: true \}\)/);
   assert.match(app, /\$\("remote-text"\)\.focus\(\{ preventScroll: true \}\)/);
   assert.match(app, /next\.width === lastDimensions\?\.width && next\.height === lastDimensions\?\.height/);
+});
+
+test("automatic IME requires another tap of the same identified host editor", () => {
+  const context = { lastTextFocusIdentity: "" };
+  const source = app.slice(app.indexOf("function acceptTextFocus("), app.indexOf("const immersive ="));
+  runInNewContext(source, context);
+  const reply = (focusId, editable = true) => context.acceptTextFocus({ focusId, editable });
+  assert.equal(reply("123"), false, "first focus must not open");
+  assert.equal(reply("123"), true, "same editor tapped again opens");
+  assert.equal(reply("456"), false, "different editor must not open");
+  assert.equal(reply("456"), true);
+  assert.equal(reply("", false), false, "outside tap clears the previous editor");
+  assert.equal(reply("456"), false);
+  assert.equal(reply(undefined), false, "old hosts have no identity, use manual keyboard");
+  assert.equal(reply("0"), false);
 });
 
 test("manual virtual keyboard primes text during the gesture and resets after OS dismissal", () => {

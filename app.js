@@ -14,6 +14,7 @@ import {
 import { installImmersive } from "./immersive.mjs?v=20261108-keyboard2";
 import { installGamepads } from "./gamepad.mjs?v=20261108-controls";
 import { typingMessages } from "./typing.mjs?v=20261108-controls";
+import { installFloatingMenu } from "./floating-menu.mjs?v=20261109-menu1";
 
 const $ = (id) => document.getElementById(id);
 const screen = $("screen");
@@ -38,6 +39,8 @@ let handoffConnecting = false, connectionStarting = false;
 let viewerId, returnInSameWindow = false;
 let automaticFullscreenPending = false;
 let focusRequest = 0, pendingFocus = 0, focusTimer;
+let lastTextFocusIdentity = "";
+let textTap;
 const contactGenerations = new Map();
 const activePointers = new Map();
 const pendingMotions = new Map();
@@ -194,7 +197,14 @@ function showKeyboard() {
   try { navigator.virtualKeyboard?.show(); }
   catch (error) { $("keyboard-status").textContent = `Browser keyboard request was limited: ${error.message}. Tap Keyboard to retry.`; }
 }
+function acceptTextFocus(message) {
+  const identity = message.editable && /^[1-9][0-9]{0,18}$/.test(message.focusId || "") ? message.focusId : "";
+  const repeated = !!identity && identity === lastTextFocusIdentity;
+  lastTextFocusIdentity = identity;
+  return repeated;
+}
 const immersive = installImmersive({ send, sendMotion, release, screen, setKeyboard, available: () => channel?.readyState === "open" });
+installFloatingMenu($("stream-tools"), $("stream-shell"), text => { $("capture-status").textContent = text; });
 const gamepads = installGamepads({ send, available: () => capabilities.gamepad && channel?.readyState === "open" && queuePosition === 0 && !document.hidden && document.hasFocus(),
   report: text => { $("gamepad-status").textContent = text; } });
 
@@ -204,6 +214,8 @@ function stop(notify = true) {
   return stopPromise;
 }
 async function stopSession(notify) {
+  lastTextFocusIdentity = "";
+  textTap = undefined;
   ++generation;
   clearTimeout(resizeTimer);
   clearInterval(statsTimer);
@@ -329,8 +341,9 @@ $("connection").addEventListener("submit", async (event) => {
         if (message.type === "text-focus" && typeof message.editable === "boolean") {
           if (message.request !== pendingFocus || !pendingFocus) return;
           pendingFocus = 0;
-          $("keyboard-status").textContent = message.editable ? "Host text field focused." : "";
-          if (message.editable && activePointers.size === 0 && !keyboardVisible) setKeyboard(true, true);
+          const repeated = acceptTextFocus(message);
+          $("keyboard-status").textContent = message.editable ? "Host text field focused. Tap it again to open the keyboard." : "";
+          if (repeated && activePointers.size === 0 && !keyboardVisible) setKeyboard(true, true);
           if (!message.editable) {
             setKeyboard(false);
             screen.focus({ preventScroll: true });
@@ -628,8 +641,14 @@ screen.addEventListener("keyup", (event) => {
   event.preventDefault();
 });
 screen.addEventListener("blur", release);
-window.addEventListener("blur", release);
-document.addEventListener("visibilitychange", () => { if (document.hidden) release(); });
+const resetTextFocus = () => {
+  clearTimeout(focusTimer);
+  pendingFocus = 0;
+  lastTextFocusIdentity = "";
+  textTap = undefined;
+};
+window.addEventListener("blur", () => { resetTextFocus(); release(); });
+document.addEventListener("visibilitychange", () => { if (document.hidden) { resetTextFocus(); release(); } });
 window.addEventListener("focus", () => gamepads.resume());
 document.addEventListener("visibilitychange", () => { if (!document.hidden) gamepads.resume(); });
 $("gamepad").addEventListener("change", () => { if ($("gamepad").checked) gamepads.start(); else gamepads.stop(); });
@@ -645,12 +664,18 @@ screen.addEventListener("pointerdown", (event) => {
     screen.setPointerCapture(event.pointerId);
     clearTimeout(focusTimer);
     pendingFocus = 0;
+    if (activePointers.size === 0) textTap = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    else { textTap = undefined; lastTextFocusIdentity = ""; }
     beginPointer(event, "touch");
     event.preventDefault();
     return;
   }
   if (event.pointerType === "pen" && backend === "native-host") {
     if (!capabilities.pen) return;
+    clearTimeout(focusTimer);
+    pendingFocus = 0;
+    textTap = undefined;
+    lastTextFocusIdentity = "";
     if (!keyboardVisible) screen.focus({ preventScroll: true });
     screen.setPointerCapture(event.pointerId);
     beginPointer(event, "pen");
@@ -673,6 +698,10 @@ screen.addEventListener("pointerdown", (event) => {
 });
 screen.addEventListener("pointermove", (event) => {
   if (event.pointerType === "touch" && backend === "native-host") {
+    if (textTap && Math.hypot(event.clientX - textTap.x, event.clientY - textTap.y) > 10) {
+      textTap = undefined;
+      lastTextFocusIdentity = "";
+    }
     if (activePointers.has(event.pointerId)) movePointer(event, "touch");
     return;
   }
@@ -689,12 +718,13 @@ screen.addEventListener("pointerup", (event) => {
   if (event.pointerType === "touch" && backend === "native-host") {
     endPointer(event, "touch");
     const position = pointerPosition(event, screen);
-    if (position && activePointers.size === 0) {
+    if (position && textTap?.id === event.pointerId && activePointers.size === 0) {
       const request = ++focusRequest;
       pendingFocus = request;
       clearTimeout(focusTimer);
       focusTimer = setTimeout(() => send({ type: "focus", request, ...position }), 150);
     }
+    textTap = undefined;
     if (screen.hasPointerCapture(event.pointerId)) screen.releasePointerCapture(event.pointerId);
     event.preventDefault();
     return;
@@ -710,6 +740,8 @@ screen.addEventListener("pointerup", (event) => {
   if (screen.hasPointerCapture(event.pointerId)) screen.releasePointerCapture(event.pointerId);
 });
 screen.addEventListener("pointercancel", (event) => {
+  textTap = undefined;
+  lastTextFocusIdentity = "";
   if (event.pointerType === "touch") endPointer(event, "touch", "cancel");
   else if (event.pointerType === "pen") endPointer(event, "pen", "cancel");
   else release();

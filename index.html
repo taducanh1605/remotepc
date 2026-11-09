@@ -29,7 +29,7 @@
     <section id="stream-shell" aria-label="Remote stream" hidden>
       <video id="screen" autoplay muted playsinline tabindex="0" aria-label="Remote desktop. Focus to send keyboard input."></video>
       <details id="stream-tools" hidden>
-        <summary aria-label="Remote controls" title="Remote controls"><span class="menu-icon" aria-hidden="true"><span></span><span></span><span></span></span></summary>
+        <summary aria-label="Remote controls" title="Tap to open. Drag to move; arrow keys move, Home resets."><span class="menu-icon" aria-hidden="true"><span></span><span></span><span></span></span></summary>
         <nav class="stream-menu-controls" aria-label="Remote controls">
         <button id="fullscreen" disabled>Enter immersive mode</button>
         <button id="disconnect" disabled>Disconnect</button>
@@ -71,7 +71,7 @@
       </details>
     <span id="remote-text-label" hidden>Remote text input</span>
     <div id="remote-text" hidden contenteditable="true" role="textbox" aria-multiline="true" inputmode="none" virtualkeyboardpolicy="manual" tabindex="-1" autocapitalize="off" spellcheck="false" aria-label="Remote keyboard input" aria-describedby="remote-text-help"></div>
-    <p id="remote-text-help" hidden>Text is sent to the focused host control. Tap Keyboard to open or close the phone keyboard manually; automatic opening requires host editable-focus confirmation and browser support.</p>
+    <p id="remote-text-help" hidden>Text is sent to the focused host control. Tap the same host text field again to open the phone keyboard, or use Keyboard manually. Automatic opening requires host editable-focus confirmation and browser support.</p>
       <dialog id="exit-dialog" aria-labelledby="exit-title">
         <h2 id="exit-title">Leave the stream?</h2>
         <p>Disconnect leaves the host session running. Quit closes the remote session only when no other clients are using it.</p>
@@ -84,7 +84,9 @@
     <details>
       <summary>Controls, permissions and limitations</summary>
       <p>Focus the video to send keys. Native hosts that advertise support receive independent multitouch contacts and stylus pressure, tilt and eraser input.
-        Standalone capture uses mouse input. The floating menu provides right click, scroll, microphone and manual keyboard controls.
+        Standalone capture uses mouse input. Tap a host text field once to focus it, then again to open the phone keyboard.
+        The menu starts on the left. Drag its three-line handle to move it; arrow keys move the focused handle and Home resets it.
+        Its saved position stays inside the stream after rotation. The floating menu provides right click, scroll, microphone and manual keyboard controls.
         Fullscreen and keyboard lock are best-effort: browser/OS shortcuts, secure desktops and Ctrl+Alt+Delete cannot be captured.
         Press Escape to leave fullscreen. Standalone resize changes encoded video only; the native backend can change host display mode subject to ownership.
         Use the browser's built-in install action to install the PWA.</p>
@@ -119,6 +121,6 @@
       <p><a href="https://github.com/taducanh1605/remotepc/releases/latest" target="_blank" rel="noopener">Download Njk Host and Njk Stream releases</a></p>
     </details>
   </main>
-  <script type="module" src="./app.js?v=20261109-keyboard8"></script>
+  <script type="module" src="./app.js?v=20261109-repeat-focus1"></script>
 </body>
 </html>
