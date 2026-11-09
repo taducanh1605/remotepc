@@ -13,7 +13,7 @@ import {
 } from "./protocol.mjs?v=20261109-viewport";
 import { installImmersive } from "./immersive.mjs?v=20261108-keyboard2";
 import { installGamepads } from "./gamepad.mjs?v=20261108-controls";
-import { typingMessages } from "./typing.mjs?v=20261108-controls";
+import { installKeyboardAccessory } from "./keyboard-accessory.mjs?v=20261109-accessory";
 import { installFloatingMenu } from "./floating-menu.mjs?v=20261109-menu1";
 
 const $ = (id) => document.getElementById(id);
@@ -52,7 +52,11 @@ let lastRttAt = 0;
 let motionSequence = 0;
 const status = (text) => { $("status").textContent = $("stream-status").textContent = text; };
 const viewport = () => visibleViewport(window.visualViewport, { width: innerWidth, height: innerHeight }, navigator.virtualKeyboard?.boundingRect);
-const dimensions = () => viewportDimensions(viewport(), $("stream-detail").value === "auto" ? window.devicePixelRatio || 1 : Number($("stream-detail").value));
+const dimensions = () => {
+  const size = viewport();
+  return viewportDimensions({ ...size, height: size.height - ($("keyboard-accessory").hidden ? 0 : 48) },
+    $("stream-detail").value === "auto" ? window.devicePixelRatio || 1 : Number($("stream-detail").value));
+};
 function requestedQuality() {
   const fps = Number($("stream-fps").value), size = dimensions();
   const bitrateKbps = $("stream-bitrate").value === "auto" ? automaticBitrate(size.width, size.height, fps) : Number($("stream-bitrate").value);
@@ -121,7 +125,9 @@ const sendMotion = (message) => {
     motionChannel.send(JSON.stringify({ ...message, sequence: message.type === "latency-ping" ? message.sequence : ++motionSequence }));
   }
 };
+const accessory = installKeyboardAccessory($("keyboard-accessory"), send);
 const release = () => {
+  accessory.release();
   gamepads.release();
   for (const contact of activePointers.values()) send({ ...contact, phase: "cancel" });
   activePointers.clear();
@@ -134,6 +140,11 @@ if (navigator.virtualKeyboard) navigator.virtualKeyboard.overlaysContent = true;
 function setKeyboard(visible, automatic = false) {
   const changed = keyboardVisible !== visible;
   keyboardVisible = visible;
+  if (!visible) {
+    accessory.release();
+    $("keyboard-accessory").hidden = true;
+    $("stream-shell").classList.remove("keyboard-open");
+  }
   $("remote-text").hidden = false;
   $("remote-text").inputMode = visible || (changed && navigator.virtualKeyboard) ? "text" : "none";
   $("remote-text").setAttribute("virtualkeyboardpolicy", navigator.virtualKeyboard ? "manual" : "auto");
@@ -193,6 +204,8 @@ function observeKeyboardGeometry() {
   const visible = explicitHeight > 0 || keyboardViewportHeight - height > Math.max(100, keyboardViewportHeight * .15);
   if (visible) keyboardObserved = true;
   else if (keyboardObserved) setKeyboard(false);
+  $("keyboard-accessory").hidden = !(keyboardVisible && visible);
+  $("stream-shell").classList.toggle("keyboard-open", keyboardVisible && visible);
 }
 function showKeyboard() {
   $("remote-text").focus({ preventScroll: true });
@@ -813,21 +826,21 @@ $("remote-text").addEventListener("beforeinput", (event) => {
     send({type:"key",code:"Backspace",down:true});
     send({type:"key",code:"Backspace",down:false});
   } else if (event.inputType === "insertLineBreak" || event.inputType === "insertParagraph") {
-    typingMessages("\n", $("typing-mode").value).forEach(send);
-  } else if (event.data && event.cancelable) typingMessages(event.data, $("typing-mode").value).forEach(send);
+    accessory.text("\n", $("typing-mode").value);
+  } else if (event.data && event.cancelable) accessory.text(event.data, $("typing-mode").value);
   if (event.cancelable) event.preventDefault();
 });
 $("remote-text").addEventListener("compositionstart", () => { composingText = true; });
 $("remote-text").addEventListener("compositionend", (event) => {
   composingText = false;
   committedComposition = event.data;
-  if (event.data) typingMessages(event.data, $("typing-mode").value).forEach(send);
+  if (event.data) accessory.text(event.data, $("typing-mode").value);
   setTimeout(() => { committedComposition = undefined; $("remote-text").textContent = ""; }, 0);
 });
 $("remote-text").addEventListener("input", () => {
   if (composingText) return;
   const text = $("remote-text").textContent;
-  if (text && text !== committedComposition) typingMessages(text, $("typing-mode").value).forEach(send);
+  if (text && text !== committedComposition) accessory.text(text, $("typing-mode").value);
   $("remote-text").textContent = "";
 });
 $("remote-text").addEventListener("keydown", event => {

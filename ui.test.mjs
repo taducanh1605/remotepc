@@ -125,10 +125,11 @@ test("manual virtual keyboard primes text during the gesture and resets after OS
     blur() { events.push(["blur"]); context.document.activeElement = null; },
     focus() { events.push(["focus", this.inputMode, this.attributes.virtualkeyboardpolicy]); context.document.activeElement = field; } };
   const nodes = { "remote-text": field, "remote-text-label": {}, "remote-text-help": {},
-    "soft-keyboard": { setAttribute() {} }, "keyboard-status": {} };
+    "soft-keyboard": { setAttribute() {} }, "keyboard-status": {},
+    "keyboard-accessory": { hidden: true }, "stream-shell": { classList: { remove() {}, toggle() {} } } };
   const frames = [];
   const context = { keyboardVisible: false, keyboardObserved: false, keyboardViewportHeight: 0, keyboardViewportWidth: 0,
-    requestAnimationFrame: callback => frames.push(callback),
+    requestAnimationFrame: callback => frames.push(callback), accessory: { release() {} },
     pendingFocus: 0, focusTimer: undefined, focusCheckTimer: undefined, lastTextFocusIdentity: "",
     backend: "standalone", clearTimeout() {}, innerHeight: 800, innerWidth: 400,
     window: {visualViewport: {height: 800, width: 400}},
@@ -149,11 +150,13 @@ test("manual virtual keyboard primes text during the gesture and resets after OS
   context.window.visualViewport.height = 500;
   context.observeKeyboardGeometry();
   assert.equal(context.keyboardObserved, true);
+  assert.equal(nodes["keyboard-accessory"].hidden, false);
   context.pendingFocus = 7;
   context.navigator.virtualKeyboard.boundingRect.height = 0;
   context.window.visualViewport.height = 800;
   context.observeKeyboardGeometry();
   assert.equal(context.keyboardVisible, false);
+  assert.equal(nodes["keyboard-accessory"].hidden, true);
   assert.equal(context.pendingFocus, 0);
   while (frames.length) frames.shift()();
   const showCount = events.filter(([name]) => name === "show").length;
@@ -187,7 +190,7 @@ test("contenteditable forwards Unicode, composition, deletion and line breaks wi
   const field = { textContent: "", addEventListener(type, handler) { handlers[type] = handler; } };
   const context = { composingText: false, committedComposition: undefined,
     $: id => id === "remote-text" ? field : { value: "unicode" },
-    typingMessages: text => [{ text }], send: message => sent.push(message),
+    accessory: { text: text => sent.push({ text }) }, send: message => sent.push(message),
     setTimeout: callback => timers.push(callback) };
   const source = app.slice(app.indexOf('$("remote-text").addEventListener("beforeinput"'), app.indexOf('$("remote-text").addEventListener("keydown"'));
   runInNewContext(source, context);
@@ -598,7 +601,7 @@ test("touch gesture focuses an existing quiet text field before the editable-foc
   assert.match(app, /field\.inputMode = navigator\.virtualKeyboard \? "text" : "none"/);
   assert.match(app, /inputMode = visible \|\| \(changed && navigator\.virtualKeyboard\) \? "text" : "none"/);
   assert.match(html, /virtualkeyboardpolicy="manual"/);
-  assert.match(app, /typingMessages\(event\.data, \$\("typing-mode"\)\.value\)/);
+  assert.match(app, /accessory\.text\(event\.data, \$\("typing-mode"\)\.value\)/);
   assert.match(html, /Host keyboard \/ UniKey/);
 });
 

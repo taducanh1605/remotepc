@@ -69,6 +69,17 @@
         <p id="stream-status" role="status" aria-live="polite"></p>
         </nav>
       </details>
+      <nav id="keyboard-accessory" aria-label="Remote keyboard extra keys" hidden>
+        <button type="button" data-key="Escape">ESC</button>
+        <button type="button" data-key="Tab">TAB</button>
+        <button type="button" data-key="ArrowUp" aria-label="Up arrow">UP</button>
+        <button type="button" data-key="ArrowDown" aria-label="Down arrow">DOWN</button>
+        <button type="button" data-key="ArrowLeft" aria-label="Left arrow">LEFT</button>
+        <button type="button" data-key="ArrowRight" aria-label="Right arrow">RIGHT</button>
+        <button type="button" data-key="AltLeft" aria-pressed="false">ALT</button>
+        <button type="button" data-key="ControlLeft" aria-pressed="false">CTRL</button>
+        <button type="button" data-key="ShiftLeft" aria-pressed="false">SHIFT</button>
+      </nav>
     <span id="remote-text-label" hidden>Remote text input</span>
     <div id="remote-text" hidden contenteditable="true" role="textbox" aria-multiline="true" inputmode="none" virtualkeyboardpolicy="manual" tabindex="-1" autocapitalize="off" spellcheck="false" aria-label="Remote keyboard input" aria-describedby="remote-text-help"></div>
     <p id="remote-text-help" hidden>Text is sent to the focused host control. Tap the same host text field again to open the phone keyboard, or use Keyboard manually. Automatic opening requires host editable-focus confirmation and browser support.</p>
@@ -87,6 +98,8 @@
         Standalone capture uses mouse input. Tap a host text field once to focus it, then again to open the phone keyboard.
         The menu starts on the left. Drag its three-line handle to move it; arrow keys move the focused handle and Home resets it.
         Its saved position stays inside the stream after rotation. The floating menu provides right click, scroll, microphone and manual keyboard controls.
+        While the phone keyboard is visible, an extra row provides Esc, Tab, arrows, Alt, Ctrl and Shift.
+        Swipe the row horizontally to reach every key. Tap a modifier to latch it, tap again to release, or hold it temporarily.
         Fullscreen and keyboard lock are best-effort: browser/OS shortcuts, secure desktops and Ctrl+Alt+Delete cannot be captured.
         Press Escape to leave fullscreen. Standalone resize changes encoded video only; the native backend can change host display mode subject to ownership.
         Use the browser's built-in install action to install the PWA.</p>
@@ -121,6 +134,6 @@
       <p><a href="https://github.com/taducanh1605/remotepc/releases/latest" target="_blank" rel="noopener">Download Njk Host and Njk Stream releases</a></p>
     </details>
   </main>
-  <script type="module" src="./app.js?v=20261109-google-focus1"></script>
+  <script type="module" src="./app.js?v=20261109-accessory"></script>
 </body>
 </html>

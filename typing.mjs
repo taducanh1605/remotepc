@@ -8,7 +8,7 @@ const punctuation = {
   "/": ["Slash", false], "?": ["Slash", true],
 };
 
-export function typingMessages(text, mode = "host") {
+export function typingMessages(text, mode = "host", held = new Set()) {
   if (mode === "unicode") return text ? [{ type: "text", text }] : [];
   const messages = [];
   let unicode = "";
@@ -20,7 +20,8 @@ export function typingMessages(text, mode = "host") {
     else if ("!@#$%^&*()".includes(character)) key = [`Digit${"!@#$%^&*()".indexOf(character) === 9 ? 0 : "!@#$%^&*()".indexOf(character) + 1}`, true];
     if (!key) { unicode += character; continue; }
     flush();
-    const [code, shift] = key;
+    const [code, needsShift] = key;
+    const shift = needsShift && !held.has("ShiftLeft");
     if (shift) messages.push({ type: "key", code: "ShiftLeft", down: true });
     messages.push({ type: "key", code, down: true }, { type: "key", code, down: false });
     if (shift) messages.push({ type: "key", code: "ShiftLeft", down: false });

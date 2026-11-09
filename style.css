@@ -47,6 +47,10 @@ body.streaming main { max-width: none; margin: 0; }
 .stream-menu-controls #zoom { width: 100%; }
 .stream-menu-controls output,.stream-menu-controls p { grid-column: 1 / -1; padding: 6px; margin: 0; font-size: .8rem; overflow-wrap: anywhere; }
 #remote-text,#remote-text-label,#remote-text-help { position: absolute; top: 0; left: 0; width: 1px; height: 1px; min-height: 1px; padding: 0; margin: 0; border: 0; opacity: .01; overflow: hidden; font-size: 16px; }
+#keyboard-accessory { position: absolute; bottom: 0; left: 0; right: 0; height: 48px; display: flex; gap: 4px; padding: 2px max(4px,env(safe-area-inset-right)) 2px max(4px,env(safe-area-inset-left)); overflow-x: auto; background: #17211d; z-index: 3; touch-action: pan-x; }
+#keyboard-accessory button { flex: 1 0 44px; padding: 4px; font-size: .75rem; touch-action: pan-x; }
+#keyboard-accessory button[aria-pressed="true"] { background: var(--lime); border: 2px solid #fff; }
+#stream-shell.keyboard-open #screen { height: calc(100% - 48px); }
 body.immersive { overflow: hidden; overscroll-behavior: none; }
 a { color: var(--forest); }
 main > details { padding: 12px 0; line-height: 1.5; }

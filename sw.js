@@ -1,5 +1,5 @@
-const CACHE = "njk-browser-v26";
-const FILES = ["./", "./index.html", "./style.css", "./app.js?v=20261109-google-focus1", "./floating-menu.mjs?v=20261109-menu1", "./immersive.mjs?v=20261108-keyboard2", "./gamepad.mjs?v=20261108-controls", "./typing.mjs?v=20261108-controls", "./protocol.mjs?v=20261109-viewport", "./manifest.webmanifest", "./icon.svg", "./icon-192.png", "./icon-512.png", "./microphone-worklet.js"];
+const CACHE = "njk-browser-v27";
+const FILES = ["./", "./index.html", "./style.css", "./app.js?v=20261109-accessory", "./keyboard-accessory.mjs?v=20261109-accessory", "./floating-menu.mjs?v=20261109-menu1", "./immersive.mjs?v=20261108-keyboard2", "./gamepad.mjs?v=20261108-controls", "./typing.mjs?v=20261109-accessory", "./protocol.mjs?v=20261109-viewport", "./manifest.webmanifest", "./icon.svg", "./icon-192.png", "./icon-512.png", "./microphone-worklet.js"];
 const urls = new Set(FILES.map((path) => new URL(path, self.registration.scope).href));
 self.addEventListener("install", (event) => event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(FILES)).then(() => self.skipWaiting())));
 self.addEventListener("activate", (event) => event.waitUntil(
