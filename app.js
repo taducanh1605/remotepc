@@ -11,7 +11,7 @@ import {
   viewportDimensions,
   visibleViewport,
 } from "./protocol.mjs?v=20261109-viewport";
-import { installImmersive } from "./immersive.mjs?v=20261109-autoimmersive";
+import { installImmersive } from "./immersive.mjs?v=20261109-rotate";
 import { installGamepads } from "./gamepad.mjs?v=20261108-controls";
 import { installKeyboardAccessory } from "./keyboard-accessory.mjs?v=20261109-accessory";
 import { installFloatingMenu } from "./floating-menu.mjs?v=20261109-menu1";

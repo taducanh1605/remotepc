@@ -43,6 +43,7 @@
           <button type="button" data-key="ShiftLeft" aria-pressed="false">SHIFT</button>
         </div>
         <button id="fullscreen" disabled>Enter immersive mode</button>
+        <button id="rotate-screen" type="button" disabled>Rotate screen</button>
         <button id="disconnect" disabled>Disconnect</button>
         <button id="microphone" disabled aria-pressed="false">Enable microphone</button>
         <button id="desktop-audio" disabled>Mute desktop audio</button>
@@ -100,6 +101,8 @@
         Its saved position stays inside the stream after rotation. The floating menu provides extra keyboard keys, right click, scroll, microphone and manual keyboard controls.
         Open the floating menu to use Esc, Tab, arrows, Alt, Ctrl and Shift, with or without the on-screen keyboard.
         Tap a modifier to latch it, tap again to release, or hold it temporarily.
+        Rotate screen switches portrait/landscape where the browser supports orientation lock, entering fullscreen if required.
+        Exit immersive restores automatic rotation. Unsupported browsers require rotating the device manually.
         Fullscreen and keyboard lock are best-effort: browser/OS shortcuts, secure desktops and Ctrl+Alt+Delete cannot be captured.
         Press Escape to leave fullscreen. Standalone resize changes encoded video only; the native backend can change host display mode subject to ownership.
         Use the browser's built-in install action to install the PWA.</p>
@@ -134,6 +137,6 @@
       <p><a href="https://github.com/taducanh1605/remotepc/releases/latest" target="_blank" rel="noopener">Download Njk Host and Njk Stream releases</a></p>
     </details>
   </main>
-  <script type="module" src="./app.js?v=20261109-menukeys"></script>
+  <script type="module" src="./app.js?v=20261109-rotate"></script>
 </body>
 </html>

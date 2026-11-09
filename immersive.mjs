@@ -16,9 +16,16 @@ export function installImmersive({ send, sendMotion = send, release, screen, ava
   let pointer = { x: .5, y: .5 };
   let fullscreenPending = false;
   let entering = false;
+  let orientationLocked = false;
+  let rotationGeneration = 0;
   const report = text => { $("capture-status").textContent = text; };
   async function exit() {
     fullscreenPending = false;
+    rotationGeneration++;
+    if (orientationLocked) {
+      window.screen.orientation.unlock();
+      orientationLocked = false;
+    }
     release();
     navigator.keyboard?.unlock();
     if (document.pointerLockElement) document.exitPointerLock();
@@ -51,6 +58,31 @@ export function installImmersive({ send, sendMotion = send, release, screen, ava
     if (fullscreenPending && available()) enter();
   }, { capture: true });
   $("exit-immersive").addEventListener("click", exit);
+  $("rotate-screen").addEventListener("click", async () => {
+    if (!available() || $("rotate-screen").disabled) return;
+    const orientation = window.screen?.orientation;
+    if (typeof orientation?.lock !== "function" || typeof orientation.unlock !== "function") {
+      report("Screen rotation is unavailable in this browser. Rotate your device manually.");
+      return;
+    }
+    const target = orientation.type?.startsWith("landscape") ? "portrait" : "landscape";
+    const generation = rotationGeneration;
+    $("rotate-screen").disabled = true;
+    release();
+    try {
+      if (!document.fullscreenElement) await enter();
+      if (!document.fullscreenElement) throw new Error("Fullscreen permission is required.");
+      if (generation !== rotationGeneration) return;
+      await orientation.lock(target);
+      if (generation !== rotationGeneration) { orientation.unlock(); return; }
+      orientationLocked = true;
+      report(`Screen rotated to ${target}. Exit immersive to restore automatic rotation.`);
+    } catch (error) {
+      if (generation === rotationGeneration) report(`Screen rotation unavailable: ${error.message}. Rotate your device manually.`);
+    } finally {
+      $("rotate-screen").disabled = $("stream-tools").hidden;
+    }
+  });
   $("pointer-lock").addEventListener("click", async () => {
     if (!available()) return;
     try { await screen.requestPointerLock(); report("Mouse locked · Escape unlocks/exits"); }
@@ -100,7 +132,8 @@ export function installImmersive({ send, sendMotion = send, release, screen, ava
   document.addEventListener("visibilitychange",()=>{ if(document.hidden)release(); });
   return { exit, connected:({ autoEnter = false } = {})=>{
     $("stream-tools").hidden=false;
+    $("rotate-screen").disabled=false;
     if (autoEnter) return enter();
   },
-    disconnected:async()=>{ $("stream-tools").hidden=true; $("stream-tools").open=false; $("zoom").value=1; $("zoom-level").value="1×"; screen.style.transform=""; await exit(); } };
+    disconnected:async()=>{ $("rotate-screen").disabled=true; $("stream-tools").hidden=true; $("stream-tools").open=false; $("zoom").value=1; $("zoom-level").value="1×"; screen.style.transform=""; await exit(); } };
 }

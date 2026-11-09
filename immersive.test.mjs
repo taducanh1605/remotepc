@@ -153,3 +153,66 @@ test("exiting fullscreen cancels automatic immersive until explicitly requested 
     assert.equal(classes.has("immersive"), false);
   });
 });
+
+test("rotate toggles actual orientation, enters fullscreen and unlocks on disconnect", async () => {
+  await withImmersive(async ({ immersive, state, element, document }) => {
+    const calls = [];
+    window.screen = { orientation: { type: "portrait-primary",
+      async lock(target) { calls.push(target); this.type = `${target}-primary`; },
+      unlock() { calls.push("unlock"); },
+    } };
+    await immersive.connected();
+    await element("rotate-screen").handlers.click();
+    assert.equal(state.requests, 1);
+    assert.ok(document.fullscreenElement);
+    await element("rotate-screen").handlers.click();
+    assert.deepEqual(calls, ["landscape", "portrait"]);
+    assert.equal(state.requests, 1);
+    await immersive.disconnected();
+    assert.deepEqual(calls, ["landscape", "portrait", "unlock"]);
+    assert.equal(element("rotate-screen").disabled, true);
+  });
+});
+
+test("rotation reports unsupported browsers, lock denial and fullscreen denial", async () => {
+  await withImmersive(async ({ immersive, state, element }) => {
+    await immersive.connected();
+    await element("rotate-screen").handlers.click();
+    assert.match(element("capture-status").textContent, /unavailable.*manually/);
+    assert.equal(state.requests, 0);
+    let locks = 0;
+    window.screen = { orientation: { type: "portrait-primary",
+      async lock() { locks++; throw new Error("Not supported on this device"); }, unlock() {},
+    } };
+    state.blocked = true;
+    await element("rotate-screen").handlers.click();
+    assert.equal(locks, 0);
+    assert.match(element("capture-status").textContent, /Fullscreen permission/);
+    state.blocked = false;
+    await element("rotate-screen").handlers.click();
+    assert.equal(locks, 1);
+    assert.match(element("capture-status").textContent, /Not supported on this device/);
+    assert.equal(element("rotate-screen").disabled, false);
+  });
+});
+
+test("disconnect during pending rotation cancels and releases a late orientation lock", async () => {
+  await withImmersive(async ({ immersive, element, document }) => {
+    let finish, unlocked = 0, locks = 0;
+    window.screen = { orientation: { type: "landscape-primary",
+      lock() { locks++; return new Promise(resolve => { finish = resolve; }); },
+      unlock() { unlocked++; },
+    } };
+    await immersive.connected();
+    document.fullscreenElement = {};
+    const rotation = element("rotate-screen").handlers.click();
+    await element("rotate-screen").handlers.click();
+    assert.equal(locks, 1, "double taps must not overlap orientation requests");
+    await immersive.disconnected();
+    finish();
+    await rotation;
+    assert.equal(unlocked, 1);
+    assert.equal(element("rotate-screen").disabled, true);
+    assert.doesNotMatch(element("capture-status").textContent, /Screen rotated/);
+  });
+});
