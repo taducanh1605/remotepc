@@ -585,7 +585,7 @@ $("connection").addEventListener("submit", async (event) => {
     if (attempt !== generation) return;
     await stop();
     const detail = isTransientNetworkError(error)
-      ? "The gateway could not be reached. Check the hostname DNS result (including NXDOMAIN), network/firewall and port 47990, then verify that the TLS certificate is trusted and matches the host name. Use “Trust host certificate…” to open the browser's manual certificate screen."
+      ? "The gateway could not be reached. Check the hostname DNS result (including NXDOMAIN), network/firewall and the configured HTTPS port (Host base + 22 for grouped ports), then verify that the TLS certificate is trusted and matches the host name. Use “Trust host certificate…” to open the browser's manual certificate screen."
       : error.message;
     status(`${detail} GitHub Pages also requires its exact origin to be allowlisted and local-network access permission.`);
   } finally { connectionStarting = false; }
@@ -942,8 +942,8 @@ function openTrustPage() {
         }
       } catch {}
     }, 2000);
-    if (!trustPopup) status("Certificate window was blocked. Click “Trust host certificate…” to open it. The original failure may be TLS, CORS, or network; accept only a valid browser certificate warning, and check DNS, firewall, port 47990, and the gateway origin allowlist if no warning appears.");
-    else status("The browser cannot distinguish an untrusted certificate from CORS or network failure. If a certificate warning appears, verify the host name and accept it manually; a verified response will retry RemotePC automatically. If no warning appears, check DNS, network/firewall, port 47990, and the gateway's PWA-origin allowlist.");
+    if (!trustPopup) status("Certificate window was blocked. Click “Trust host certificate…” to open it. The original failure may be TLS, CORS, or network; accept only a valid browser certificate warning, and check DNS, firewall, the configured HTTPS port, and the gateway origin allowlist if no warning appears.");
+    else status("The browser cannot distinguish an untrusted certificate from CORS or network failure. If a certificate warning appears, verify the host name and accept it manually; a verified response will retry RemotePC automatically. If no warning appears, check DNS, network/firewall, the configured HTTPS port, and the gateway's PWA-origin allowlist.");
   } catch (error) { status(error.message); }
 }
 $("trust-host").addEventListener("click", openTrustPage);
@@ -1088,7 +1088,7 @@ async function connectFromESPWake() {
   } catch (error) {
     if (isTransientNetworkError(error)) {
       if (verifiedTrustOrigin === remoteLaunch?.host) {
-        status("Host TLS is verified, but the browser still cannot access the gateway. Check network/firewall, port 47990, and the gateway's exact PWA-origin CORS allowlist; retry after fixing access.");
+        status("Host TLS is verified, but the browser still cannot access the gateway. Check network/firewall, the configured HTTPS port, and the gateway's exact PWA-origin CORS allowlist; retry after fixing access.");
       } else {
         status("The browser could not complete host access. This may be an untrusted certificate, CORS/origin policy, or network failure. The security window will not bypass browser warnings; verified certificate acceptance retries RemotePC automatically.");
         openTrustPage();

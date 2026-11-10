@@ -16,8 +16,8 @@
   </header>
   <main>
     <form id="connection">
-      <label for="host">Browser gateway HTTPS address (default port 47990)</label>
-      <input id="host" name="host" type="url" placeholder="https://host.example:47990" required autocomplete="url" spellcheck="false">
+      <label for="host">Browser gateway HTTPS address (grouped ports: Host base + 22; legacy: 47990)</label>
+      <input id="host" name="host" type="url" placeholder="https://host.example:32027" required autocomplete="url" spellcheck="false">
       <button id="trust-host" type="button">Trust host certificate…</button>
       <label for="token">Access token</label>
       <input id="token" name="token" type="password" required minlength="32" autocomplete="off" spellcheck="false">
@@ -138,6 +138,6 @@
       <p><a href="https://github.com/taducanh1605/remotepc/releases/latest" target="_blank" rel="noopener">Download Njk Host and Njk Stream releases</a></p>
     </details>
   </main>
-  <script type="module" src="./app.js?v=20261110-split1"></script>
+  <script type="module" src="./app.js?v=20261110-ports1"></script>
 </body>
 </html>
