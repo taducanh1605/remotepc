@@ -37,6 +37,9 @@ body.streaming main { max-width: none; margin: 0; }
 #stream-loading { position: absolute; top: 50%; left: 10%; width: 80%; color: #fff; text-align: center; z-index: 1; pointer-events: none; }
 #screen { display: block; width: 100%; height: 100%; background: #000; object-fit: contain; object-position: center top; transform-origin: center top; touch-action: none; }
 #stream-shell:fullscreen #screen { height: var(--viewport-height,100%); }
+#resize-preview { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: center top; background: #000; pointer-events: none; opacity: 1; transition: opacity 120ms ease-out; }
+#resize-preview.fading { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { #resize-preview { transition: none; } }
 #stream-tools { position: absolute; top: max(8px,env(safe-area-inset-top)); left: max(8px,env(safe-area-inset-left)); z-index: 2; max-width: calc(100% - 16px); padding: 0; border: 1px solid var(--line); border-radius: 8px; background: #fffffff5; color: var(--forest); box-shadow: var(--shadow); }
 #stream-tools summary { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; cursor: grab; list-style: none; touch-action: none; user-select: none; }
 #stream-tools summary::-webkit-details-marker { display: none; }
@@ -44,13 +47,15 @@ body.streaming main { max-width: none; margin: 0; }
 .menu-icon span { height: 2px; border-radius: 1px; background: currentColor; }
 .stream-menu-controls { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); width: min(320px,calc(100vw - 20px)); gap: 6px; padding: 8px; max-height: calc(var(--viewport-height,100dvh) - 72px); overflow: auto; }
 .stream-menu-controls button { min-width: 0; font-size: .875rem; }
-.stream-menu-controls label { align-self: center; }
-.stream-menu-controls #zoom { width: 100%; }
+.stream-menu-controls label { align-self: center; font-size: .85rem; }
+.stream-menu-controls select { width: 100%; font-size: .85rem; padding: 8px; }
+#typing-mode { grid-column: 1 / -1; }
+.stream-menu-controls .check-option { grid-column: 1 / -1; }
 .stream-menu-controls output,.stream-menu-controls p { grid-column: 1 / -1; padding: 6px; margin: 0; font-size: .8rem; overflow-wrap: anywhere; }
 #remote-text,#remote-text-label,#remote-text-help { position: absolute; top: 0; left: 0; width: 1px; height: 1px; min-height: 1px; padding: 0; margin: 0; border: 0; opacity: .01; overflow: hidden; font-size: 16px; }
 #keyboard-accessory { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 4px; }
-#keyboard-accessory button { min-height: 44px; padding: 4px; font-size: .75rem; touch-action: manipulation; }
-#keyboard-accessory button[aria-pressed="true"] { background: var(--lime); border: 2px solid #fff; }
+#keyboard-accessory button { min-height: 44px; padding: 4px; font-size: .75rem; touch-action: none; user-select: none; -webkit-touch-callout: none; }
+#keyboard-accessory button[aria-pressed="true"] { background: var(--lime); border-color: var(--forest); box-shadow: inset 0 0 0 1px var(--forest); }
 body.immersive { overflow: hidden; overscroll-behavior: none; }
 a { color: var(--forest); }
 main > details { padding: 12px 0; line-height: 1.5; }
@@ -61,6 +66,8 @@ dialog { max-width: min(420px,calc(100vw - 24px)); max-height: calc(var(--viewpo
 dialog::backdrop { background: #0009; }
 dialog h2 { font-size: 1.2rem; }
 dialog p { overflow-wrap: anywhere; }
+.exit-actions { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; }
+.exit-actions button { padding: 8px 4px; font-size: clamp(.7rem,3.3vw,.875rem); white-space: nowrap; }
 @media (max-width: 480px) {
   body { padding-inline: max(10px,env(safe-area-inset-left)) max(10px,env(safe-area-inset-right)); }
   #connection { padding: 18px 14px; }

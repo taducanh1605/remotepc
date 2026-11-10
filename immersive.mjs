@@ -60,11 +60,12 @@ export function installImmersive({ send, sendMotion = send, release, screen, ava
         : `Keyboard capture limited: ${error.message}. Use toolbar shortcuts.`);
     } finally { entering = false; }
   }
-  $("fullscreen").addEventListener("click", () => { if (available()) return enter(); });
+  $("fullscreen").addEventListener("click", () => {
+    if (available()) return document.body.classList.contains("immersive") || document.fullscreenElement ? exit() : enter();
+  });
   shell.addEventListener("pointerdown", () => {
     if (fullscreenPending && available()) enter();
   }, { capture: true });
-  $("exit-immersive").addEventListener("click", exit);
   $("rotate-screen").addEventListener("click", async () => {
     if (!available() || $("rotate-screen").disabled) return;
     const orientation = window.screen?.orientation;
@@ -108,22 +109,6 @@ export function installImmersive({ send, sendMotion = send, release, screen, ava
     setKeyboard(visible);
     if (!visible) screen.focus({ preventScroll: true });
   });
-  $("right-click").addEventListener("click", () => {
-    send({ type:"button",button:2,down:true }); send({ type:"button",button:2,down:false });
-  });
-  for (const [id,delta] of [["scroll-up",-120],["scroll-down",120]]) {
-    $(id).addEventListener("click",()=>send({type:"wheel",delta}));
-  }
-  for (const button of document.querySelectorAll("[data-shortcut]")) {
-    button.addEventListener("click",()=>{
-      release(); shortcutMessages(button.dataset.shortcut).forEach(send); screen.focus();
-    });
-  }
-  $("zoom").addEventListener("input",event=>{
-    const zoom=Math.max(1,Math.min(3,Number(event.target.value)));
-    screen.style.transform=`scale(${zoom})`;
-    $("zoom-level").value=`${zoom}×`;
-  });
   shell.addEventListener("touchmove",event=>{
     if(event.target===screen)event.preventDefault();
   },{passive:false});
@@ -142,5 +127,5 @@ export function installImmersive({ send, sendMotion = send, release, screen, ava
     $("rotate-screen").disabled=false;
     if (autoEnter) return enter(requestFullscreen);
   },
-    disconnected:async()=>{ $("rotate-screen").disabled=true; $("stream-tools").hidden=true; $("stream-tools").open=false; $("zoom").value=1; $("zoom-level").value="1×"; screen.style.transform=""; await exit(); } };
+    disconnected:async()=>{ $("rotate-screen").disabled=true; $("stream-tools").hidden=true; $("stream-tools").open=false; await exit(); } };
 }

@@ -1,6 +1,7 @@
 import { typingMessages } from "./typing.mjs?v=20261109-accessory";
 
-const modifiers = new Set(["AltLeft", "ControlLeft", "ShiftLeft"]);
+const modifiers = new Set(["AltLeft", "ControlLeft", "ShiftLeft", "MetaLeft"]);
+const holdDelay = 600;
 
 export function installKeyboardAccessory(row, send) {
   const held = new Set();
@@ -9,7 +10,8 @@ export function installKeyboardAccessory(row, send) {
   const key = (code, down) => send({ type: "key", code, down });
   function update() {
     for (const button of buttons) {
-      if (modifiers.has(button.dataset.key)) button.setAttribute("aria-pressed", String(held.has(button.dataset.key)));
+      button.addEventListener("contextmenu", event => event.preventDefault());
+      button.setAttribute("aria-pressed", String(held.has(button.dataset.key)));
     }
   }
   function release() {
@@ -22,7 +24,7 @@ export function installKeyboardAccessory(row, send) {
     const press = pointers.get(event.pointerId);
     if (!press) return;
     pointers.delete(event.pointerId);
-    if (cancelled || !modifiers.has(press.code) || press.wasHeld || Date.now() - press.start >= 300) {
+    if (cancelled || press.wasHeld || (!modifiers.has(press.code) && Date.now() - press.start < holdDelay)) {
       if (held.delete(press.code)) key(press.code, false);
     }
     update();
@@ -45,7 +47,7 @@ export function installKeyboardAccessory(row, send) {
       // Only keyboard/assistive activation should use this fallback.
       if (event.detail !== 0 || event.pointerType || event.sourceCapabilities?.firesTouchEvents) return;
       const code = button.dataset.key;
-      if (modifiers.has(code)) {
+      if (modifiers.has(code) || held.has(code)) {
         if (held.delete(code)) key(code, false);
         else { held.add(code); key(code, true); }
         update();

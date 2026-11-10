@@ -28,9 +28,15 @@ export function desktopViewport(viewport, pixelRatio = 1, scalePercent = 0, auto
     : 1;
   const width = native.width * grow, height = native.height * grow;
   const bound = Math.min(1, 3840 / width, 3840 / height, Math.sqrt(3840 * 2160 / (width * height)));
+  const minimumWidth = dpiSupported && scale > 100 ? (portrait ? 6 : 8) * scale : 320;
+  const minimumHeight = dpiSupported && scale > 100 ? (portrait ? 8 : 6) * scale : 240;
+  // A very tall phone can hit the long-axis cap just before Windows permits
+  // 300%. Pad the short axis instead of shrinking the logical desktop below it.
+  const boundedWidth = Math.max(minimumWidth, width * bound);
+  const boundedHeight = Math.max(minimumHeight, height * bound);
   return {
-    width: Math.max(320, Math.floor((width * bound + 1e-6) / 2) * 2),
-    height: Math.max(240, Math.floor((height * bound + 1e-6) / 2) * 2),
+    width: Math.max(320, Math.floor((boundedWidth + 1e-6) / 2) * 2),
+    height: Math.max(240, Math.floor((boundedHeight + 1e-6) / 2) * 2),
     scalePercent: scale,
   };
 }

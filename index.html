@@ -32,22 +32,31 @@
       <details id="stream-tools" hidden>
         <summary aria-label="Remote controls" title="Tap to open. Drag to move; arrow keys move, Home resets."><span class="menu-icon" aria-hidden="true"><span></span><span></span><span></span></span></summary>
         <nav class="stream-menu-controls" aria-label="Remote controls">
+        <button id="rotate-screen" type="button" disabled>Rotate screen</button>
+        <button id="soft-keyboard" aria-pressed="false">Keyboard</button>
+        <select id="typing-mode"><option value="host">Host keyboard / UniKey (US layout)</option><option value="unicode">Direct Unicode / mobile IME</option></select>
+        <button id="disconnect" disabled>Disconnect</button>
+        <button id="fullscreen" disabled>Toggle immersive mode</button>
+        <button id="microphone" disabled aria-pressed="false">Enable microphone</button>
+
         <div id="keyboard-accessory" role="group" aria-label="Remote keyboard extra keys">
           <button type="button" data-key="Escape">ESC</button>
+          <button type="button" data-key="ShiftLeft" aria-pressed="false">SHIFT</button>
+          <button type="button" data-key="CapsLock" aria-pressed="false">CAPS</button>
+
           <button type="button" data-key="Tab">TAB</button>
           <button type="button" data-key="ArrowUp" aria-label="Up arrow">UP</button>
-          <button type="button" data-key="ArrowDown" aria-label="Down arrow">DOWN</button>
+          <button type="button" data-key="Delete">DEL</button>
+
           <button type="button" data-key="ArrowLeft" aria-label="Left arrow">LEFT</button>
+          <button type="button" data-key="ArrowDown" aria-label="Down arrow">DOWN</button>
           <button type="button" data-key="ArrowRight" aria-label="Right arrow">RIGHT</button>
-          <button type="button" data-key="AltLeft" aria-pressed="false">ALT</button>
+
           <button type="button" data-key="ControlLeft" aria-pressed="false">CTRL</button>
-          <button type="button" data-key="ShiftLeft" aria-pressed="false">SHIFT</button>
+          <button type="button" data-key="MetaLeft" aria-pressed="false">WIN</button>
+          <button type="button" data-key="AltLeft" aria-pressed="false">ALT</button>
         </div>
-        <button id="fullscreen" disabled>Enter immersive mode</button>
-        <button id="rotate-screen" type="button" disabled>Rotate screen</button>
-        <button id="disconnect" disabled>Disconnect</button>
-        <button id="microphone" disabled aria-pressed="false">Enable microphone</button>
-        <button id="desktop-audio" disabled>Mute desktop audio</button>
+
         <output id="playback-status" role="status" aria-live="polite"></output>
         <label for="stream-fps">Frame rate</label>
         <select id="stream-fps"><option value="60">60 FPS</option><option value="120">120 FPS</option><option value="90">90 FPS</option><option value="30">30 FPS</option></select>
@@ -55,7 +64,7 @@
         <select id="stream-detail"><option value="auto">Auto</option><option value="1">Standard (1×)</option><option value="2">High (2×)</option></select>
         <label for="desktop-scale">Windows DPI</label>
         <select id="desktop-scale"><option value="0">System</option><option value="100">100%</option><option value="125">125%</option><option value="150">150%</option><option value="175">175%</option><option value="200">200%</option><option value="225">225%</option><option value="250">250%</option><option value="300">300%</option></select>
-        <label class="check-option"><input id="auto-desktop-scale" type="checkbox"> Auto DPI</label>
+        <label class="check-option"><input id="auto-desktop-scale" type="checkbox" checked> Auto DPI</label>
         <output id="desktop-scale-status" role="status" aria-live="polite"></output>
         <label for="stream-bitrate">Bitrate limit</label>
         <select id="stream-bitrate"><option value="auto">Auto</option><option value="1000">1 Mbps</option><option value="2000">2 Mbps</option><option value="4000">4 Mbps</option><option value="8000">8 Mbps</option><option value="12000">12 Mbps</option><option value="20000">20 Mbps</option></select>
@@ -64,23 +73,12 @@
         <output id="video-quality">Video quality: negotiating…</output>
         <output id="quality-request" role="status" aria-live="polite"></output>
         <output id="audio-status" role="status" aria-live="polite"></output>
-        <button id="exit-immersive">Exit immersive</button>
+
         <button id="pointer-lock">Lock mouse</button>
-        <button id="soft-keyboard" aria-pressed="false">Keyboard</button>
-        <label for="typing-mode">Text input</label>
-        <select id="typing-mode"><option value="host">Host keyboard / UniKey (US layout)</option><option value="unicode">Direct Unicode / mobile IME</option></select>
+        <button id="desktop-audio" disabled>Mute desktop audio</button>
         <output id="keyboard-status" role="status" aria-live="polite"></output>
         <label class="check-option"><input id="gamepad" type="checkbox" checked disabled> Enable gamepads</label>
         <output id="gamepad-status" role="status" aria-live="polite"></output>
-        <button id="right-click">Right click</button>
-        <button id="scroll-up" aria-label="Scroll remote desktop up">Scroll ↑</button>
-        <button id="scroll-down" aria-label="Scroll remote desktop down">Scroll ↓</button>
-        <button data-shortcut="win">Remote Win</button>
-        <button data-shortcut="alt-tab">Remote Alt+Tab</button>
-        <button data-shortcut="escape">Remote Esc</button>
-        <label for="zoom">Local magnifier</label>
-        <input id="zoom" type="range" min="1" max="3" step="0.25" value="1">
-        <output id="zoom-level" for="zoom">1×</output>
         <output id="latency" aria-live="polite">Control RTT: measuring…</output>
         <p id="input-capabilities" role="status" aria-live="polite">Waiting for host input capabilities.</p>
         <p id="capture-status" role="status" aria-live="polite">Input capture off</p>
@@ -94,12 +92,14 @@
         <h2 id="exit-title">Leave the stream?</h2>
         <p>Disconnect leaves the host session running. Quit closes the remote session only when no other clients are using it.</p>
         <p id="exit-error" role="alert"></p>
+        <div class="exit-actions">
         <button id="exit-cancel" type="button" autofocus>Cancel</button>
         <button id="exit-disconnect" type="button">Disconnect</button>
         <button id="exit-quit" type="button">Quit session</button>
+        </div>
       </dialog>
     </section>
   </main>
-  <script type="module" src="./app.js?v=20261110-dpi2"></script>
+  <script type="module" src="./app.js?v=20261110-controls1"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@ import { installKeyboardAccessory } from "./keyboard-accessory.mjs";
 
 function fixture() {
   const sent = [], buttons = {};
-  for (const code of ["Escape", "Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "AltLeft", "ControlLeft", "ShiftLeft"]) {
+  for (const code of ["Escape", "Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "AltLeft", "ControlLeft", "ShiftLeft", "MetaLeft", "CapsLock", "Delete"]) {
     const listeners = {};
     buttons[code] = {
       dataset: { key: code }, attributes: {},
@@ -82,5 +82,41 @@ test("different pointers can hold a modifier and navigation together", () => {
   buttons.ControlLeft.fire("pointercancel", 3);
   assert.deepEqual(sent.map(message => [message.code, message.down]), [
     ["ControlLeft", true], ["ArrowRight", true], ["ArrowRight", false], ["ControlLeft", false],
+  ]);
+});
+
+test("long press latches every extra key until its next tap releases it", t => {
+  let time = 0;
+  t.mock.method(Date, "now", () => time);
+  for (const code of ["Escape", "Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "AltLeft", "ControlLeft", "ShiftLeft", "MetaLeft", "CapsLock", "Delete"]) {
+    const { sent, buttons } = fixture();
+    buttons[code].fire("pointerdown");
+    time += 2000;
+    buttons[code].fire("pointerup");
+    buttons[code].fire("lostpointercapture");
+    buttons[code].touchClick();
+    assert.deepEqual(sent, [{ type: "key", code, down: true }], code);
+    assert.equal(buttons[code].attributes["aria-pressed"], "true");
+    buttons[code].fire("pointerdown");
+    buttons[code].fire("pointerup");
+    assert.deepEqual(sent.at(-1), { type: "key", code, down: false });
+    assert.equal(sent.length, 2);
+    assert.equal(buttons[code].attributes["aria-pressed"], "false");
+  }
+});
+
+test("accessibility activation can release a long-held non-modifier and WIN participates in shortcuts", t => {
+  let time = 0;
+  t.mock.method(Date, "now", () => time);
+  const { sent, buttons, accessory } = fixture();
+  buttons.Delete.fire("pointerdown");
+  time += 2000;
+  buttons.Delete.fire("pointerup");
+  buttons.Delete.activate();
+  buttons.MetaLeft.activate();
+  accessory.text("r", "unicode");
+  accessory.release();
+  assert.deepEqual(sent.map(message => [message.code, message.down]), [
+    ["Delete", true], ["Delete", false], ["MetaLeft", true], ["KeyR", true], ["KeyR", false], ["MetaLeft", false],
   ]);
 });

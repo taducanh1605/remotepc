@@ -63,7 +63,7 @@ async function withImmersive(run) {
   const document = {
     getElementById: element, querySelectorAll: () => [],
     addEventListener(type, handler) { listeners.set(type, handler); },
-    body: { classList: { add: name => classes.add(name), remove: name => classes.delete(name) } },
+    body: { classList: { add: name => classes.add(name), remove: name => classes.delete(name), contains: name => classes.has(name) } },
     fullscreenElement: null,
     async exitFullscreen() { this.fullscreenElement = null; },
   };
@@ -119,6 +119,17 @@ test("automatic immersive requests fullscreen without another click when permitt
     assert.equal(state.requests, 1);
     assert.equal(state.locks, 1);
     assert.equal(classes.has("immersive"), true);
+  });
+
+  test("the merged immersive button enters and exits without a separate removed button", async () => {
+    await withImmersive(async ({ state, element, classes, document }) => {
+      await element("fullscreen").handlers.click();
+      assert.equal(state.requests, 1);
+      assert.ok(classes.has("immersive"));
+      await element("fullscreen").handlers.click();
+      assert.equal(classes.has("immersive"), false);
+      assert.equal(document.fullscreenElement, null);
+    });
   });
 });
 

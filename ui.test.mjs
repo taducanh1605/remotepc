@@ -59,7 +59,7 @@ test("RTT bitrate adaptation is a persisted default-off menu option negotiated a
 
 test("Windows DPI is persisted separately from old render scale and sent as a real native control", () => {
   assert.match(html, /id="auto-desktop-scale" type="checkbox"/);
-  assert.doesNotMatch(html, /id="auto-desktop-scale"[^>]*checked/);
+  assert.match(html, /id="auto-desktop-scale"[^>]*checked/);
   assert.match(html, /<label for="desktop-scale">Windows DPI<\/label>/);
   const setup = app.slice(app.indexOf("try {\n  const savedScale"), app.indexOf("async function waitForViewport()"));
   const controls = {
@@ -67,7 +67,6 @@ test("Windows DPI is persisted separately from old render scale and sent as a re
     "auto-desktop-scale": { checked: false },
     "stream-detail": { value: "auto" },
     "desktop-scale-status": {},
-    zoom: { value: 2, dispatchEvent() {} },
   };
   for (const control of Object.values(controls)) control.addEventListener = function(_type, callback) { this.change = callback; };
   const saved = new Map([["njk-desktop-scale", "200"], ["njk-auto-desktop-scale", "true"]]), events = [], messages = [];
@@ -82,9 +81,9 @@ test("Windows DPI is persisted separately from old render scale and sent as a re
     Event: class {}, status: message => { throw new Error(message); },
   };
   runInNewContext(setup, context);
-  assert.equal(controls["auto-desktop-scale"].checked, false);
+  assert.equal(controls["auto-desktop-scale"].checked, true);
   assert.equal(controls["desktop-scale"].value, "0");
-  assert.equal(controls["desktop-scale"].disabled, false);
+  assert.equal(controls["desktop-scale"].disabled, true);
   controls["auto-desktop-scale"].checked = true;
   controls["auto-desktop-scale"].change();
   assert.equal(controls["desktop-scale"].disabled, true);
@@ -93,7 +92,6 @@ test("Windows DPI is persisted separately from old render scale and sent as a re
   assert.equal(messages.at(-1).scalePercent, 200);
   assert.equal(messages.at(-1).autoScale, true);
   assert.deepEqual(events, ["release", "resize"]);
-  assert.equal(controls.zoom.value, 1);
   assert.equal(saved.get("njk-auto-windows-dpi"), "true");
   controls["auto-desktop-scale"].checked = false;
   controls["desktop-scale"].value = "150";
@@ -131,6 +129,18 @@ test("lowering Windows DPI preserves the session pixel canvas instead of resizin
   }
 });
 
+test("300 percent keeps enough logical desktop even on tall phones without exceeding encoder limits", () => {
+  for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }, { width: 320, height: 900 }]) {
+    const mode = desktopViewport(viewport, 3, 300, false, true);
+    const portrait = mode.height > mode.width;
+    assert.ok(mode.width >= (portrait ? 600 : 800) * 3);
+    assert.ok(mode.height >= (portrait ? 800 : 600) * 3);
+    assert.ok(mode.width <= 3840 && mode.height <= 3840);
+    assert.ok(mode.width * mode.height <= 3840 * 2160);
+    assert.equal(mode.scalePercent, 300);
+  }
+});
+
 test("applying 120 FPS after reducing 4K detail sends viewport before quality", () => {
   const events = [], button = { addEventListener(_type, callback) { this.apply = callback; } };
   const controls = { "apply-quality": button, "quality-request": {} };
@@ -139,6 +149,7 @@ test("applying 120 FPS after reducing 4K detail sends viewport before quality", 
   const context = {
     $: id => controls[id],
     dimensions: () => ({ width: 1920, height: 1080 }),
+    release() {}, videoTransition: { begin() {} },
     requestedQuality: () => ({ fps: 120, bitrateKbps: 20000 }),
     channel: { readyState: "open" },
     lastDimensions: { width: 3840, height: 2160 },
@@ -157,6 +168,7 @@ test("negotiated viewport prevents a duplicate startup resize from restoring ful
   const helper = app.slice(app.indexOf("function sendViewport()"), app.indexOf("const resized = () =>"));
   const assignment = app.match(/lastDimensions = offeredDimensions;/)[0];
   const context = { offeredDimensions, lastDimensions: undefined, dimensions: () => actual,
+    release() {}, videoTransition: { begin() {} },
     channel: { readyState: "open" }, send: message => events.push(message) };
   assert.equal(runInNewContext(`${assignment}\n${helper}\nsendViewport()`, context), false);
   actual = { width: 1280, height: 720 };
@@ -210,7 +222,7 @@ test("browser handles installation without custom buttons or suppressed prompts"
 test("remote controls float over video and expose microphone and connection actions", () => {
   assert.match(html, /<video id="screen"[^>]*><\/video>\s*<details id="stream-tools" hidden>/);
   assert.match(html, /<video id="screen"[^>]* muted/);
-  for (const id of ["fullscreen", "disconnect", "microphone", "pointer-lock", "soft-keyboard", "right-click", "zoom"]) {
+  for (const id of ["fullscreen", "disconnect", "microphone", "pointer-lock", "soft-keyboard", "rotate-screen"]) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
   assert.match(html, /<summary aria-label="Remote controls"[^>]*><span class="menu-icon"/);

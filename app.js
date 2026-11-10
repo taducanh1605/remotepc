@@ -11,16 +11,18 @@ import {
   requestFullscreenInGesture,
   videoFrameRate,
   visibleViewport,
-} from "./protocol.mjs?v=20261110-dpi2";
+} from "./protocol.mjs?v=20261110-controls1";
 import { controlLatency } from "./latency.mjs?v=20261110-rtt";
 import { separateStreamsSupported, gatherOffer } from "./input-transport.mjs?v=20261110-split";
-import { installImmersive } from "./immersive.mjs?v=20261110-stability";
+import { installImmersive } from "./immersive.mjs?v=20261110-controls1";
 import { installGamepads } from "./gamepad.mjs?v=20261110-stability";
-import { installKeyboardAccessory } from "./keyboard-accessory.mjs?v=20261109-accessory";
+import { installKeyboardAccessory } from "./keyboard-accessory.mjs?v=20261110-controls1";
+import { installVideoTransition } from "./video-transition.mjs?v=20261110-controls1";
 import { installFloatingMenu } from "./floating-menu.mjs?v=20261109-menu1";
 
 const $ = (id) => document.getElementById(id);
 const screen = $("screen");
+const videoTransition = installVideoTransition(screen, $("stream-shell"), text => { $("stream-status").textContent = text; });
 let pc, inputPeer, audioPeer, channel, motionChannel, endpoint, token, sessionId, resizeTimer, motionFrame, statsTimer, latencyTimer;
 let generation = 0;
 let backend = "standalone";
@@ -75,7 +77,7 @@ try {
     if (![...$("desktop-scale").options].some(option => option.value === savedScale)) throw new Error("Invalid saved desktop scale");
     $("desktop-scale").value = savedScale;
   }
-  $("auto-desktop-scale").checked = localStorage.getItem("njk-auto-windows-dpi") === "true";
+  $("auto-desktop-scale").checked = localStorage.getItem("njk-auto-windows-dpi") !== "false";
 } catch (error) { console.warn("Desktop scale could not be restored:", error.message); }
 $("desktop-scale").disabled = $("auto-desktop-scale").checked;
 let lastDesktopScale = "", desktopDpiStatus = "";
@@ -101,8 +103,6 @@ function changeDesktopScale() {
     localStorage.setItem("njk-windows-dpi", $("desktop-scale").value);
     localStorage.setItem("njk-auto-windows-dpi", String($("auto-desktop-scale").checked));
   } catch (error) { status(`Desktop scale could not be saved: ${error.message}`); }
-  $("zoom").value = 1;
-  $("zoom").dispatchEvent(new Event("input"));
   release();
   lastDesktopScale = "";
   updateDesktopScaleStatus();
@@ -305,6 +305,7 @@ function stop(notify = true) {
   return stopPromise;
 }
 async function stopSession(notify) {
+  videoTransition.cancel();
   lastTextFocusIdentity = "";
   clearTimeout(focusCheckTimer);
   pendingFocusCheck = 0;
@@ -443,8 +444,8 @@ $("connection").addEventListener("submit", async (event) => {
           updateDesktopScaleStatus();
         }
         if (message.type === "resized") {
-          if (message.success === false) $("desktop-scale-status").textContent = "Host could not resize this desktop.";
-          else { lastDesktopScale = ""; applyDesktopScale(); updateDesktopScaleStatus(); }
+          if (message.success === false) { videoTransition.cancel(); $("desktop-scale-status").textContent = "Host could not resize this desktop."; }
+          else { videoTransition.ready(); lastDesktopScale = ""; applyDesktopScale(); updateDesktopScaleStatus(); }
         }
         if (message.type === "quality" && message.fps && message.bitrateKbps) {
           if (message.success !== false) $("stream-fps").value = String(message.fps);
@@ -971,6 +972,8 @@ function sendViewport() {
   const next = dimensions();
   if (next.width === lastDimensions?.width && next.height === lastDimensions?.height) return false;
   if (channel?.readyState !== "open") return false;
+  release();
+  videoTransition.begin(next);
   lastDimensions = next;
   send({ type: "resize", ...next });
   return true;
