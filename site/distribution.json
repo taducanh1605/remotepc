@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "product": "njk-pwa",
-  "version": 45,
+  "version": 46,
   "entry": "stream-efa577fee90b2e4f.js",
   "files": {
     "COPYING.txt": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
-    "SOURCE.txt": "29659eb5c665501605e50d46c260a75f5657bad9387d8b910c38747673cbc4fa",
+    "SOURCE.txt": "075704cb8c1b897367e8cd37591a9665a674dbb15d28abaeece89aa28b7e0110",
     "icon-192.png": "35ad8445c93d5076d142d2f861da55fb131d0449d662ab39fe05135f938c9778",
     "icon-512.png": "6b5bd0e8d316009d6f754f49426b9c3a58fa689c6b15959e0b62d60d6fcd12c4",
     "icon.svg": "a8b76d4afa5883453c40eb75a7a1b478968557e07ebb3f9066550f831b9c1fc3",
@@ -14,6 +14,6 @@
     "microphone-worklet.js": "7f97b515228c38d3e6f9117f759b314dacc217edb46fd4c6da966193c3d6d218",
     "stream-efa577fee90b2e4f.js": "efa577fee90b2e4f48ecc9dfcc2e3c26149fcbfcf98507e7377295850ca76649",
     "style.css": "c566a05732d39827b7bd1dfde73087c116250dd98ac49b8e913951048bf1767f",
-    "sw.js": "76485a9a2ad3a6982d53c2ec5117c5b12d1e5169b2618736f9776360a5bc24d3"
+    "sw.js": "d2ec2d0f696ab63bc2932f092fbd6ec2fa421a346b7726a446e3555e637577d3"
   }
 }
