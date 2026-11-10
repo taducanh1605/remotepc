@@ -86,12 +86,25 @@ test("Windows DPI defaults preserve resolution and DPI canvas never imitates sca
     const auto = desktopViewport(viewport, 3, 100, true);
     assert.equal(auto.scalePercent, 200);
     assert.ok(auto.width >= unchanged.width && auto.height >= unchanged.height);
-    assert.ok(auto.width >= 1600 && auto.height >= 1200);
+    assert.ok(Math.max(auto.width, auto.height) >= 1600 && Math.min(auto.width, auto.height) >= 1200);
   }
-  assert.deepEqual(desktopViewport({ width: 390, height: 844 }, 2, 200), { width: 1600, height: 3462, scalePercent: 200 });
-  assert.deepEqual(desktopViewport({ width: 390, height: 844 }, 2, 150), { width: 1200, height: 2596, scalePercent: 150 });
+  assert.deepEqual(desktopViewport({ width: 390, height: 844 }, 2, 200), { width: 1200, height: 2596, scalePercent: 200 });
+  assert.deepEqual(desktopViewport({ width: 390, height: 844 }, 2, 150), { width: 900, height: 1946, scalePercent: 150 });
   assert.deepEqual(desktopViewport({ width: 390, height: 844 }, 2, 200, false, false), { width: 780, height: 1688, scalePercent: 200 });
   assert.deepEqual(desktopViewport({ width: 390, height: 844 }, 1, 200, true), { width: 390, height: 844, scalePercent: 100 });
+});
+test("phone Auto DPI enlarges UI in CSS pixels and keeps the same canvas budget after rotation", () => {
+  const canvases = [];
+  for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
+    const baseline = desktopViewport(viewport, 3);
+    const auto = desktopViewport(viewport, 3, 0, true);
+    const uiGain = auto.scalePercent / 100 * baseline.width / auto.width;
+    assert.ok(uiGain >= 1.25, `DPI canvas cancels the apparent UI enlargement: ${uiGain}`);
+    assert.ok(auto.width * auto.height < 4_000_000);
+    canvases.push(auto);
+  }
+  assert.equal(canvases[0].width, canvases[1].height);
+  assert.equal(canvases[0].height, canvases[1].width);
 });
 test("desktop scale is bounded after rotation, keyboard geometry and codec resolution limits", () => {
   for (const viewport of [{ width: 393, height: 852 }, { width: 852, height: 393 }, { width: 390, height: 100 }, { width: 7680, height: 4320 }, { width: 320, height: 240 }]) {

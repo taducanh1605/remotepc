@@ -22,7 +22,10 @@ export function desktopViewport(viewport, pixelRatio = 1, scalePercent = 0, auto
     : scalePercent === 0 ? 0 : Math.max(100, Math.min(300, scalePercent));
   // Windows limits effective DPI when the logical desktop is too small.
   // Grow the pixel canvas, never downscale it to imitate a DPI change.
-  const grow = dpiSupported && scale > 100 ? Math.max(1, 8 * scale / native.width, 6 * scale / native.height) : 1;
+  const portrait = native.height > native.width;
+  const grow = dpiSupported && scale > 100
+    ? Math.max(1, (portrait ? 6 : 8) * scale / native.width, (portrait ? 8 : 6) * scale / native.height)
+    : 1;
   const width = native.width * grow, height = native.height * grow;
   const bound = Math.min(1, 3840 / width, 3840 / height, Math.sqrt(3840 * 2160 / (width * height)));
   return {

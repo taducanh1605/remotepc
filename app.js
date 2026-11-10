@@ -11,7 +11,7 @@ import {
   requestFullscreenInGesture,
   videoFrameRate,
   visibleViewport,
-} from "./protocol.mjs?v=20261110-dpi1";
+} from "./protocol.mjs?v=20261110-dpi2";
 import { controlLatency } from "./latency.mjs?v=20261110-rtt";
 import { separateStreamsSupported, gatherOffer } from "./input-transport.mjs?v=20261110-split";
 import { installImmersive } from "./immersive.mjs?v=20261110-stability";

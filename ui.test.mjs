@@ -123,8 +123,8 @@ test("lowering Windows DPI preserves the session pixel canvas instead of resizin
   };
   runInNewContext(`${source}\nglobalThis.testDimensions = dimensions;`, context);
   const first = context.testDimensions();
-  assert.equal(first.width, 1600);
-  assert.equal(first.height, 3462);
+  assert.equal(first.width, 1200);
+  assert.equal(first.height, 2596);
   for (const percent of ["150", "125", "0"]) {
     scale.value = percent;
     assert.deepEqual(context.testDimensions(), first);

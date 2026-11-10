@@ -1,5 +1,5 @@
-const CACHE = "njk-browser-v41";
-const FILES = ["./", "./index.html", "./style.css", "./app.js?v=20261110-dpi1", "./input-transport.mjs?v=20261110-split", "./latency.mjs?v=20261110-rtt", "./keyboard-accessory.mjs?v=20261109-accessory", "./floating-menu.mjs?v=20261109-menu1", "./immersive.mjs?v=20261110-stability", "./gamepad.mjs?v=20261110-stability", "./typing.mjs?v=20261109-accessory", "./protocol.mjs?v=20261110-dpi1", "./manifest.webmanifest", "./icon.svg", "./icon-192.png", "./icon-512.png", "./microphone-worklet.js"];
+const CACHE = "njk-browser-v42";
+const FILES = ["./", "./index.html", "./style.css", "./app.js?v=20261110-dpi2", "./input-transport.mjs?v=20261110-split", "./latency.mjs?v=20261110-rtt", "./keyboard-accessory.mjs?v=20261109-accessory", "./floating-menu.mjs?v=20261109-menu1", "./immersive.mjs?v=20261110-stability", "./gamepad.mjs?v=20261110-stability", "./typing.mjs?v=20261109-accessory", "./protocol.mjs?v=20261110-dpi2", "./manifest.webmanifest", "./icon.svg", "./icon-192.png", "./icon-512.png", "./microphone-worklet.js"];
 const urls = new Set(FILES.map((path) => new URL(path, self.registration.scope).href));
 self.addEventListener("install", (event) => event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(FILES)).then(() => self.skipWaiting())));
 self.addEventListener("activate", (event) => event.waitUntil(
