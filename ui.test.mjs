@@ -454,7 +454,7 @@ test("ESP Wake selects fullscreen and automatically submits a redeemed host cred
   assert.equal(elements.token.value.length, 32);
   assert.equal(context.remoteLaunch, undefined);
   assert.deepEqual(context.requests.map(url => new URL(url).pathname), ["/api/connect-prepare", "/api/connect"]);
-  assert.match(app, /\$\("connect-fullscreen"\)\.checked = true/);
+  assert.match(app, /\$\("connect-fullscreen"\)\.checked = false/);
   assert.match(app, /immersive\.connected\(\{ autoEnter: \$\("connect-fullscreen"\)\.checked, requestFullscreen: false \}\)/);
 });
 
@@ -736,4 +736,24 @@ test("fullscreen denial never prevents ESP Wake connection but remains an error 
       assert.equal(await result, true);
     } else await assert.rejects(result, /user activation required/);
   }
+});
+
+test("motion buffering stays near one MTU and RTT feedback preserves its probe identity", () => {
+  const source = app.slice(app.indexOf("const sendMotion ="), app.indexOf("const accessory ="));
+  const messages = [];
+  const context = {
+    motionChannel: { readyState: "open", bufferedAmount: 0, send: data => messages.push(JSON.parse(data)) },
+    motionSequence: 10,
+  };
+  runInNewContext(`${source}; globalThis.sendMotion = sendMotion;`, context);
+  assert.equal(context.sendMotion({ type: "latency-report", sequence: 42, rttMs: 16 }), true);
+  assert.equal(messages[0].sequence, 42);
+  assert.equal(context.sendMotion({ type: "move", x: .2, y: .3 }), true);
+  assert.equal(messages[1].sequence, 11);
+  context.motionChannel.bufferedAmount = 1200;
+  assert.equal(context.sendMotion({ type: "latency-ping", sequence: 43 }), false);
+  assert.equal(messages.length, 2);
+  context.motionChannel.readyState = "closed";
+  assert.equal(context.sendMotion({ type: "move", x: .3, y: .4 }), false);
+  assert.match(app, /if \(sendMotion\(\{ type: "latency-ping", sequence \}\)\) pendingPings\.set/);
 });

@@ -12,6 +12,7 @@ import {
   videoFrameRate,
   visibleViewport,
 } from "./protocol.mjs?v=20261110-latency";
+import { controlLatency } from "./latency.mjs?v=20261110-rtt";
 import { installImmersive } from "./immersive.mjs?v=20261110-stability";
 import { installGamepads } from "./gamepad.mjs?v=20261110-stability";
 import { installKeyboardAccessory } from "./keyboard-accessory.mjs?v=20261109-accessory";
@@ -97,7 +98,7 @@ if (launchParameters.has("ticket")) {
     const ticket = launchParameters.get("ticket");
     if (!/^[a-f0-9]{32}$/.test(ticket || "")) throw new Error("Invalid ESP Wake connection ticket.");
     $("host").value = host;
-    $("connect-fullscreen").checked = true;
+    $("connect-fullscreen").checked = false;
     remoteLaunch = { host, ticket };
     remoteLaunch.prepared = launchParameters.get("prepared") === "1";
     remoteLaunch.profileId = launchParameters.get("profileId") || undefined;
@@ -121,9 +122,11 @@ const send = (message) => {
   channel.send(JSON.stringify(message));
 };
 const sendMotion = (message) => {
-  if (motionChannel?.readyState === "open" && motionChannel.bufferedAmount < 16384) {
-    motionChannel.send(JSON.stringify({ ...message, sequence: message.type === "latency-ping" ? message.sequence : ++motionSequence }));
+  if (motionChannel?.readyState === "open" && motionChannel.bufferedAmount < 1200) {
+    motionChannel.send(JSON.stringify({ ...message, sequence: ["latency-ping", "latency-report"].includes(message.type) ? message.sequence : ++motionSequence }));
+    return true;
   }
+  return false;
 };
 const accessory = installKeyboardAccessory($("keyboard-accessory"), send);
 const release = () => {
@@ -377,6 +380,11 @@ $("connection").addEventListener("submit", async (event) => {
             ? "Audio silenced for this same-host viewer to prevent speaker feedback. Remote devices retain desktop audio."
             : "Desktop audio enabled for this viewer.";
         }
+        if (message.type === "latency-budget") {
+          $("quality-request").textContent = message.atMinimum
+            ? "Control RTT remains over 20 ms at minimum video bitrate. Check Wi-Fi/WAN latency or device load; the target cannot be guaranteed."
+            : `Prioritizing input: requesting ${message.bitrateKbps} kbps video · control RTT target <20 ms.`;
+        }
         if (message.type === "text-focus" && typeof message.editable === "boolean") {
           if (message.checkOnly === true) {
             if (!pendingFocusCheck || message.request !== pendingFocusCheck) return;
@@ -427,22 +435,21 @@ $("connection").addEventListener("submit", async (event) => {
         if (lastRttAt && now - lastRttAt > 5000) $("latency").textContent = "Control RTT: no recent reply";
         if (motionChannel?.readyState !== "open" || pendingPings.size >= 2) return;
         const sequence = ++pingSequence;
-        pendingPings.set(sequence, now);
-        sendMotion({ type: "latency-ping", sequence });
-      }, 2000);
+        if (sendMotion({ type: "latency-ping", sequence })) pendingPings.set(sequence, now);
+      }, 250);
     });
     motionChannel.addEventListener("message", (event) => {
       try {
         const message = JSON.parse(event.data);
         if (message.type !== "latency-pong" || !pendingPings.has(message.sequence)) return;
-        const rtt = Math.round(performance.now() - pendingPings.get(message.sequence));
+        const rtt = performance.now() - pendingPings.get(message.sequence);
         pendingPings.delete(message.sequence);
         lastRttAt = performance.now();
+        if (capabilities.latencyControl && !document.hidden) sendMotion({ type: "latency-report", sequence: message.sequence, rttMs: rtt });
         latencySamples.push(rtt);
-        if (latencySamples.length > 5) latencySamples.shift();
-        const sorted = [...latencySamples].sort((a, b) => a - b);
-        const median = sorted[Math.floor(sorted.length / 2)];
-        $("latency").textContent = `Control RTT: ${median} ms median`;
+        if (latencySamples.length > 40) latencySamples.shift();
+        const { median, p95, max } = controlLatency(latencySamples);
+        $("latency").textContent = `Control RTT: ${Math.round(median)} ms median · p95 ${Math.ceil(p95)} ms · max ${Math.ceil(max)} ms · target <20 ms${p95 >= 20 ? " — over budget; check network/device load" : ""}`;
       } catch { /* Ignore messages outside the motion protocol. */ }
     });
     peer.addEventListener("track", ({ track, receiver, streams }) => {
@@ -507,7 +514,7 @@ $("connection").addEventListener("submit", async (event) => {
     }
     sessionId = answer.id;
     backend = answer.capture;
-    capabilities = { touch: answer.capabilities?.touch === true, pen: answer.capabilities?.pen === true, gamepad: answer.capabilities?.gamepad === true, gamepadFocusRetention: answer.capabilities?.gamepadFocusRetention === true };
+    capabilities = { touch: answer.capabilities?.touch === true, pen: answer.capabilities?.pen === true, gamepad: answer.capabilities?.gamepad === true, gamepadFocusRetention: answer.capabilities?.gamepadFocusRetention === true, latencyControl: answer.capabilities?.latencyControl === true };
     $("gamepad").disabled = !capabilities.gamepad;
     if (capabilities.gamepad && $("gamepad").checked) gamepads.start();
     $("gamepad-status").textContent = capabilities.gamepad
