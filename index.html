@@ -56,6 +56,7 @@
         <label for="stream-bitrate">Bitrate limit</label>
         <select id="stream-bitrate"><option value="auto">Auto</option><option value="1000">1 Mbps</option><option value="2000">2 Mbps</option><option value="4000">4 Mbps</option><option value="8000">8 Mbps</option><option value="12000">12 Mbps</option><option value="20000">20 Mbps</option></select>
         <button id="apply-quality" disabled>Apply quality</button>
+        <label class="check-option"><input id="latency-adaptation" type="checkbox" disabled> Reduce bitrate at high RTT</label>
         <output id="video-quality">Video quality: negotiating…</output>
         <output id="quality-request" role="status" aria-live="polite"></output>
         <output id="audio-status" role="status" aria-live="polite"></output>
@@ -95,6 +96,6 @@
       </dialog>
     </section>
   </main>
-  <script type="module" src="./app.js?v=20261110-quality1"></script>
+  <script type="module" src="./app.js?v=20261110-optin1"></script>
 </body>
 </html>

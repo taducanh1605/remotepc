@@ -27,6 +27,36 @@ test("latency adaptation displays the negotiated budget rather than an obsolete 
   assert.doesNotMatch(handler, /<20 ms/);
 });
 
+test("RTT bitrate adaptation is a persisted default-off menu option negotiated at connect and live", () => {
+  assert.match(html, /<input id="latency-adaptation" type="checkbox" disabled> Reduce bitrate at high RTT/);
+  assert.doesNotMatch(html, /id="latency-adaptation"[^>]*checked/);
+  const menu = html.slice(html.indexOf('<details id="stream-tools"'), html.indexOf("</details>", html.indexOf('<details id="stream-tools"')));
+  assert.match(menu, /id="latency-adaptation"/);
+  assert.match(app, /latencyAdaptation: \$\("latency-adaptation"\)\.checked/);
+  const setup = app.slice(app.indexOf('try {\n  $("latency-adaptation").checked'), app.indexOf("const launchParameters"));
+  const element = { checked: false, addEventListener(_type, callback) { this.change = callback; } };
+  const saved = new Map(), sent = [];
+  const context = {
+    $: id => id === "latency-adaptation" ? element : {},
+    localStorage: { getItem: key => saved.get(key) ?? null, setItem: (key, value) => saved.set(key, value) },
+    capabilities: { latencyAdaptation: true }, send: message => sent.push(message),
+  };
+  runInNewContext(setup, context);
+  assert.equal(element.checked, false);
+  element.checked = true;
+  element.change();
+  assert.equal(saved.get("njk-latency-adaptation"), "true");
+  assert.deepEqual(JSON.parse(JSON.stringify(sent)), [{ type: "latency-policy", enabled: true }]);
+  element.checked = false;
+  runInNewContext(setup, context);
+  assert.equal(element.checked, true);
+  element.checked = false;
+  element.change();
+  assert.equal(sent.at(-1).enabled, false);
+  assert.equal(saved.get("njk-latency-adaptation"), "false");
+  assert.doesNotMatch(app, /target <20 ms/);
+});
+
 test("applying 120 FPS after reducing 4K detail sends viewport before quality", () => {
   const events = [], button = { addEventListener(_type, callback) { this.apply = callback; } };
   const controls = { "apply-quality": button, "quality-request": {} };
@@ -598,9 +628,11 @@ test("same-window certificate approval after 120 seconds renews through saved ES
 test("legacy manual offers preserve their payload while ESPWake supplies the replacement identity", () => {
   const expression = app.match(/body: JSON\.stringify\((\{ sdp: peer\.localDescription\.sdp[^\n]+)\),/)[1];
   const context = { peer: { localDescription: { sdp: "test-sdp" } },
-    separateStreams: false, offeredDimensions: { width: 750, height: 1624 }, requestedQuality: () => ({ fps: 60, bitrateKbps: 8000 }) };
+    separateStreams: false, offeredDimensions: { width: 750, height: 1624 }, requestedQuality: () => ({ fps: 60, bitrateKbps: 8000 }),
+    $: () => ({ checked: false }) };
   const manual = runInNewContext(`(${expression})`, { ...context, viewerId: undefined });
   assert.equal(Object.hasOwn(manual, "clientId"), false);
+  assert.equal(manual.latencyAdaptation, false);
   const handoff = runInNewContext(`(${expression})`, { ...context, viewerId: "a".repeat(32) });
   assert.equal(handoff.clientId, "a".repeat(32));
   assert.equal(handoff.width, 750);

@@ -91,6 +91,16 @@ function saveHost() {
   catch (error) { status(`Host address could not be saved: ${error.message}`); }
   return origin;
 }
+try {
+  $("latency-adaptation").checked = localStorage.getItem("njk-latency-adaptation") === "true";
+} catch (error) { console.warn("RTT preference could not be restored:", error.message); }
+$("latency-adaptation").addEventListener("change", () => {
+  const enabled = $("latency-adaptation").checked;
+  try { localStorage.setItem("njk-latency-adaptation", String(enabled)); }
+  catch (error) { status(`RTT preference could not be saved: ${error.message}`); }
+  if (capabilities.latencyAdaptation) send({ type: "latency-policy", enabled });
+  $("quality-request").textContent = "";
+});
 const launchParameters = new URLSearchParams(location.hash.slice(1));
 if (launchParameters.has("ticket")) {
   history.replaceState(null, "", location.pathname + location.search);
@@ -361,6 +371,7 @@ $("connection").addEventListener("submit", async (event) => {
     channel.addEventListener("open", () => {
       send({ type: "resize", ...dimensions() });
       if ($("gamepad").checked) gamepads.start();
+      if (capabilities.latencyAdaptation) send({ type: "latency-policy", enabled: $("latency-adaptation").checked });
     });
     channel.addEventListener("message", (event) => {
       try {
@@ -453,11 +464,11 @@ $("connection").addEventListener("submit", async (event) => {
         const rtt = performance.now() - pendingPings.get(message.sequence);
         pendingPings.delete(message.sequence);
         lastRttAt = performance.now();
-        if (capabilities.latencyControl && !document.hidden) sendMotion({ type: "latency-report", sequence: message.sequence, rttMs: rtt });
+        if (capabilities.latencyAdaptation && !document.hidden) sendMotion({ type: "latency-report", sequence: message.sequence, rttMs: rtt });
         latencySamples.push(rtt);
         if (latencySamples.length > 40) latencySamples.shift();
         const { median, p95, max } = controlLatency(latencySamples);
-        $("latency").textContent = `Control RTT: ${Math.round(median)} ms median · p95 ${Math.ceil(p95)} ms · max ${Math.ceil(max)} ms · target <20 ms${p95 >= 20 ? " — over budget; check network/device load" : ""}`;
+        $("latency").textContent = `Control RTT: ${Math.round(median)} ms median · p95 ${Math.ceil(p95)} ms · max ${Math.ceil(max)} ms`;
       } catch { /* Ignore messages outside the motion protocol. */ }
     });
     const receiveTrack = ({ track, receiver, streams }) => {
@@ -502,7 +513,7 @@ $("connection").addEventListener("submit", async (event) => {
     const offerEndpoint = endpoint, offerToken = token, offeredDimensions = dimensions();
     const response = await fetch(offerEndpoint, {
       method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ sdp: peer.localDescription.sdp, ...offeredDimensions, ...requestedQuality(), ...(viewerId ? { clientId: viewerId } : {}), ...(separateStreams ? { inputSdp: controls.localDescription.sdp, audioSdp: sound.localDescription.sdp } : {}) }),
+      body: JSON.stringify({ sdp: peer.localDescription.sdp, ...offeredDimensions, ...requestedQuality(), latencyAdaptation: $("latency-adaptation").checked, ...(viewerId ? { clientId: viewerId } : {}), ...(separateStreams ? { inputSdp: controls.localDescription.sdp, audioSdp: sound.localDescription.sdp } : {}) }),
       cache: "no-store", signal: AbortSignal.timeout(20000),
     });
     if (!response.ok) {
@@ -524,7 +535,8 @@ $("connection").addEventListener("submit", async (event) => {
     sessionId = answer.id;
     if (separateStreams && (!answer.inputSdp || !answer.audioSdp)) throw new Error("Host did not negotiate the requested separate audio/input connections.");
     backend = answer.capture;
-    capabilities = { touch: answer.capabilities?.touch === true, pen: answer.capabilities?.pen === true, gamepad: answer.capabilities?.gamepad === true, gamepadFocusRetention: answer.capabilities?.gamepadFocusRetention === true, latencyControl: answer.capabilities?.latencyControl === true };
+    capabilities = { touch: answer.capabilities?.touch === true, pen: answer.capabilities?.pen === true, gamepad: answer.capabilities?.gamepad === true, gamepadFocusRetention: answer.capabilities?.gamepadFocusRetention === true, latencyControl: answer.capabilities?.latencyControl === true, latencyAdaptation: answer.capabilities?.latencyAdaptation === true };
+    $("latency-adaptation").disabled = !capabilities.latencyAdaptation;
     $("gamepad").disabled = !capabilities.gamepad;
     if (capabilities.gamepad && $("gamepad").checked) gamepads.start();
     $("gamepad-status").textContent = capabilities.gamepad
