@@ -29,6 +29,35 @@ test("applying 120 FPS after reducing 4K detail sends viewport before quality", 
   assert.equal(events[1].fps, 120);
 });
 
+test("negotiated viewport prevents a duplicate startup resize from restoring full bitrate", () => {
+  const events = [], offeredDimensions = { width: 720, height: 1280 };
+  let actual = offeredDimensions;
+  const helper = app.slice(app.indexOf("function sendViewport()"), app.indexOf("const resized = () =>"));
+  const assignment = app.match(/lastDimensions = offeredDimensions;/)[0];
+  const context = { offeredDimensions, lastDimensions: undefined, dimensions: () => actual,
+    channel: { readyState: "open" }, send: message => events.push(message) };
+  assert.equal(runInNewContext(`${assignment}\n${helper}\nsendViewport()`, context), false);
+  actual = { width: 1280, height: 720 };
+  assert.equal(context.sendViewport(), true);
+  assert.equal(events.length, 1);
+});
+
+test("automatic viewport updates preserve the adaptive budget with compatible legacy payloads", () => {
+  const source = app.slice(app.indexOf("const resized = () =>"), app.indexOf("window.visualViewport?.addEventListener"));
+  for (const latencyControl of [false, true]) {
+    const events = [];
+    runInNewContext(`${source}\nresized()`, {
+      observeKeyboardGeometry() {}, document: { documentElement: { style: { setProperty() {} } } },
+      viewport: () => ({ height: 800 }), resizeTimer: undefined, clearTimeout() {},
+      setTimeout: callback => callback(), sendViewport: () => true,
+      $: () => ({ value: "auto" }), requestedQuality: () => ({ fps: 60, bitrateKbps: 9216 }),
+      capabilities: { latencyControl }, send: message => events.push(message),
+    });
+    assert.equal(events[0].bitrateKbps, 9216);
+    assert.equal(events[0].adaptive, latencyControl ? true : undefined);
+  }
+});
+
 test("gamepads default on and editor blur releases pointer/keys without disconnecting the controller", () => {
   assert.match(html, /id="gamepad"[^>]*checked/);
   const release = app.slice(app.indexOf("const release = () => {"), app.indexOf("if (navigator.virtualKeyboard)"));
@@ -334,7 +363,7 @@ test("input motion is lossy/coalesced while edge controls remain reliable", () =
 
 test("sixty FPS is selected by default and initial negotiation includes selected quality", () => {
   assert.match(html, /id="stream-fps"><option value="60">/);
-  assert.match(app, /sdp: peer\.localDescription\.sdp, \.\.\.dimensions\(\), \.\.\.requestedQuality\(\)/);
+  assert.match(app, /sdp: peer\.localDescription\.sdp, \.\.\.offeredDimensions, \.\.\.requestedQuality\(\)/);
   assert.match(app, /const \{ fps, bitrateKbps \} = requestedQuality\(\)/);
 });
 
@@ -552,7 +581,7 @@ test("same-window certificate approval after 120 seconds renews through saved ES
 test("legacy manual offers preserve their payload while ESPWake supplies the replacement identity", () => {
   const expression = app.match(/body: JSON\.stringify\((\{ sdp: peer\.localDescription\.sdp[^\n]+)\),/)[1];
   const context = { peer: { localDescription: { sdp: "test-sdp" } },
-    dimensions: () => ({ width: 750, height: 1624 }), requestedQuality: () => ({ fps: 60, bitrateKbps: 8000 }) };
+    offeredDimensions: { width: 750, height: 1624 }, requestedQuality: () => ({ fps: 60, bitrateKbps: 8000 }) };
   const manual = runInNewContext(`(${expression})`, { ...context, viewerId: undefined });
   assert.equal(Object.hasOwn(manual, "clientId"), false);
   const handoff = runInNewContext(`(${expression})`, { ...context, viewerId: "a".repeat(32) });

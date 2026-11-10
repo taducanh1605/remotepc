@@ -490,10 +490,10 @@ $("connection").addEventListener("submit", async (event) => {
         check();
       });
     }
-    const offerEndpoint = endpoint, offerToken = token;
+    const offerEndpoint = endpoint, offerToken = token, offeredDimensions = dimensions();
     const response = await fetch(offerEndpoint, {
       method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ sdp: peer.localDescription.sdp, ...dimensions(), ...requestedQuality(), ...(viewerId ? { clientId: viewerId } : {}) }),
+      body: JSON.stringify({ sdp: peer.localDescription.sdp, ...offeredDimensions, ...requestedQuality(), ...(viewerId ? { clientId: viewerId } : {}) }),
       cache: "no-store", signal: AbortSignal.timeout(20000),
     });
     if (!response.ok) {
@@ -530,6 +530,7 @@ $("connection").addEventListener("submit", async (event) => {
       $("stream-fps").value = String(answer.quality.fps);
       $("video-quality").textContent = `${answer.quality.fps} FPS · ${answer.quality.bitrateKbps} kbps`;
     }
+    lastDimensions = offeredDimensions;
     await peer.setRemoteDescription({ type: "answer", sdp: answer.sdp });
     $("connection").hidden = true;
     $("stream-shell").hidden = false;
@@ -884,7 +885,7 @@ const resized = () => {
   document.documentElement.style.setProperty("--viewport-top", "0px");
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
-    if (sendViewport() && $("stream-bitrate").value === "auto") send({ type: "quality", ...requestedQuality() });
+    if (sendViewport() && $("stream-bitrate").value === "auto") send({ type: "quality", ...requestedQuality(), ...(capabilities.latencyControl ? { adaptive: true } : {}) });
   }, 120);
 };
 window.visualViewport?.addEventListener("resize", resized);
