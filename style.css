@@ -34,6 +34,7 @@ body.streaming > header,body.streaming #connection,body.streaming #status,body.s
 body.streaming main { max-width: none; margin: 0; }
 #stream-shell { position: fixed; top: var(--viewport-top,0px); left: 0; width: 100%; height: var(--viewport-height,100dvh); overflow: hidden; background: #000; overscroll-behavior: contain; }
 #stream-shell:fullscreen { top: 0; width: 100%; height: var(--viewport-height,100dvh); }
+#stream-loading { position: absolute; top: 50%; left: 10%; width: 80%; color: #fff; text-align: center; z-index: 1; pointer-events: none; }
 #screen { display: block; width: 100%; height: 100%; background: #000; object-fit: contain; object-position: center top; transform-origin: center top; touch-action: none; }
 #stream-shell:fullscreen #screen { height: var(--viewport-height,100%); }
 #stream-tools { position: absolute; top: max(8px,env(safe-area-inset-top)); left: max(8px,env(safe-area-inset-left)); z-index: 2; max-width: calc(100% - 16px); padding: 0; border: 1px solid var(--line); border-radius: 8px; background: #fffffff5; color: var(--forest); box-shadow: var(--shadow); }

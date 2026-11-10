@@ -11,8 +11,8 @@ import {
   viewportDimensions,
   visibleViewport,
 } from "./protocol.mjs?v=20261109-viewport";
-import { installImmersive } from "./immersive.mjs?v=20261109-rotate";
-import { installGamepads } from "./gamepad.mjs?v=20261108-controls";
+import { installImmersive } from "./immersive.mjs?v=20261110-stability";
+import { installGamepads } from "./gamepad.mjs?v=20261110-stability";
 import { installKeyboardAccessory } from "./keyboard-accessory.mjs?v=20261109-accessory";
 import { installFloatingMenu } from "./floating-menu.mjs?v=20261109-menu1";
 
@@ -49,7 +49,7 @@ const latencySamples = [];
 let pingSequence = 0;
 let lastRttAt = 0;
 let motionSequence = 0;
-const status = (text) => { $("status").textContent = $("stream-status").textContent = text; };
+const status = (text) => { $("status").textContent = $("stream-status").textContent = $("stream-loading").textContent = text; };
 const viewport = () => visibleViewport(window.visualViewport, { width: innerWidth, height: innerHeight }, navigator.virtualKeyboard?.boundingRect);
 const dimensions = () => {
   const size = viewport();
@@ -127,13 +127,13 @@ const sendMotion = (message) => {
 const accessory = installKeyboardAccessory($("keyboard-accessory"), send);
 const release = () => {
   accessory.release();
-  gamepads.release();
   for (const contact of activePointers.values()) send({ ...contact, phase: "cancel" });
   activePointers.clear();
   pendingMotions.clear();
   if (motionFrame) cancelAnimationFrame(motionFrame);
   motionFrame = undefined;
-  send({ type: "release" });
+  send({ type: "release", ...(capabilities.gamepadFocusRetention ? { preserveGamepads: true } : {}) });
+  if (!capabilities.gamepadFocusRetention) gamepads.refresh();
 };
 if (navigator.virtualKeyboard) navigator.virtualKeyboard.overlaysContent = true;
 function setKeyboard(visible, automatic = false) {
@@ -255,7 +255,6 @@ async function stopSession(notify) {
   pendingFocus = 0;
   release();
   gamepads.stop();
-  $("gamepad").checked = false;
   $("gamepad").disabled = true;
   setKeyboard(false);
   await immersive.disconnected();
@@ -270,6 +269,7 @@ async function stopSession(notify) {
   $("playback-status").textContent = "";
   $("desktop-audio").disabled = true;
   $("stream-shell").hidden = true;
+  $("stream-loading").hidden = true;
   document.body.classList.remove("streaming");
   document.querySelector('meta[name="theme-color"]').content = "#14231d";
   document.documentElement.style.removeProperty("--viewport-height");
@@ -310,6 +310,12 @@ $("connection").addEventListener("submit", async (event) => {
   connectionStarting = true;
   const automatic = automaticConnection;
   automaticConnection = false;
+  $("connection").hidden = true;
+  $("stream-shell").hidden = false;
+  $("stream-loading").hidden = false;
+  document.body.classList.add("streaming");
+  document.querySelector('meta[name="theme-color"]').content = "#000000";
+  status("Connecting…");
   const fullscreenRequest = requestFullscreenInGesture(document.documentElement, $("connect-fullscreen").checked);
   $("connect").disabled = true;
   const attempt = ++generation;
@@ -340,7 +346,10 @@ $("connection").addEventListener("submit", async (event) => {
     channel = peer.createDataChannel("input", { ordered: true });
     motionChannel = peer.createDataChannel("motion", { ordered: false, maxRetransmits: 0 });
     micChannel = peer.createDataChannel("microphone", { ordered: false, maxRetransmits: 0 });
-    channel.addEventListener("open", () => send({ type: "resize", ...dimensions() }));
+    channel.addEventListener("open", () => {
+      send({ type: "resize", ...dimensions() });
+      if ($("gamepad").checked) gamepads.start();
+    });
     channel.addEventListener("message", (event) => {
       try {
         const message = JSON.parse(event.data);
@@ -496,9 +505,12 @@ $("connection").addEventListener("submit", async (event) => {
     }
     sessionId = answer.id;
     backend = answer.capture;
-    capabilities = { touch: answer.capabilities?.touch === true, pen: answer.capabilities?.pen === true, gamepad: answer.capabilities?.gamepad === true };
+    capabilities = { touch: answer.capabilities?.touch === true, pen: answer.capabilities?.pen === true, gamepad: answer.capabilities?.gamepad === true, gamepadFocusRetention: answer.capabilities?.gamepadFocusRetention === true };
     $("gamepad").disabled = !capabilities.gamepad;
-    $("gamepad-status").textContent = capabilities.gamepad ? "Enable gamepad input, then press a controller button." : "Native gamepad input is unavailable.";
+    if (capabilities.gamepad && $("gamepad").checked) gamepads.start();
+    $("gamepad-status").textContent = capabilities.gamepad
+      ? ($("gamepad").checked ? "Gamepad input enabled. Press a controller button." : "Enable gamepad input, then press a controller button.")
+      : "Native gamepad input is unavailable.";
     $("input-capabilities").textContent = backend === "native-host"
       ? `Host input: ${capabilities.touch ? "multitouch" : "no multitouch"} · ${capabilities.pen ? "stylus pressure/tilt/eraser" : "no stylus input"}. Unsupported inputs are not converted to mouse.`
       : "Standalone gateway supports mouse input only; native multitouch and stylus are unavailable.";
@@ -511,11 +523,10 @@ $("connection").addEventListener("submit", async (event) => {
     }
     await peer.setRemoteDescription({ type: "answer", sdp: answer.sdp });
     $("connection").hidden = true;
-    document.querySelector('meta[name="theme-color"]').content = "#000000";
     $("stream-shell").hidden = false;
     document.body.classList.add("streaming");
     resized();
-    immersive.connected({ autoEnter: $("connect-fullscreen").checked });
+    immersive.connected({ autoEnter: $("connect-fullscreen").checked, requestFullscreen: false });
     $("disconnect").disabled = $("fullscreen").disabled = false;
     $("desktop-audio").disabled = false;
     status("WebRTC negotiated. Waiting for actual video frames…");
@@ -664,6 +675,7 @@ $("microphone").addEventListener("click", async () => {
   } catch (error) { await stopMicrophone(); status(`Microphone unavailable: ${error.message}`); }
   finally { if (pc && backend === "native-host") $("microphone").disabled = false; }
 });
+screen.addEventListener("playing", () => { $("stream-loading").hidden = true; });
 screen.addEventListener("click", () => startPlayback(true));
 $("desktop-audio").addEventListener("click", () => {
   if (!screen.muted) {
@@ -689,8 +701,8 @@ const resetTextFocus = () => {
   lastTextFocusIdentity = "";
   textTap = undefined;
 };
-window.addEventListener("blur", () => { resetTextFocus(); release(); });
-document.addEventListener("visibilitychange", () => { if (document.hidden) { resetTextFocus(); release(); } });
+window.addEventListener("blur", () => { resetTextFocus(); release(); gamepads.release(); });
+document.addEventListener("visibilitychange", () => { if (document.hidden) { resetTextFocus(); release(); gamepads.release(); } });
 window.addEventListener("focus", () => { gamepads.resume(); scheduleFocusCheck(); });
 document.addEventListener("visibilitychange", () => { if (!document.hidden) { gamepads.resume(); scheduleFocusCheck(); } });
 $("gamepad").addEventListener("change", () => { if ($("gamepad").checked) gamepads.start(); else gamepads.stop(); });

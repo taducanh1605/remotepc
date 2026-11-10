@@ -33,12 +33,19 @@ export function installImmersive({ send, sendMotion = send, release, screen, ava
     document.body.classList.remove("immersive");
     report("Input capture off; browser/OS shortcuts may remain reserved");
   }
-  async function enter() {
+  async function enter(requestFullscreen = true) {
     if (entering) return;
     entering = true;
     document.body.classList.add("immersive");
     try {
-      if (!document.fullscreenElement) await shell.requestFullscreen();
+      if (!document.fullscreenElement) {
+        if (!requestFullscreen) {
+          fullscreenPending = true;
+          report("Immersive mode active. Tap the stream to allow fullscreen.");
+          return;
+        }
+        await shell.requestFullscreen();
+      }
       fullscreenPending = false;
       if (document.activeElement !== $("remote-text")) screen.focus({ preventScroll: true });
       if (navigator.keyboard?.lock) {
@@ -130,10 +137,10 @@ export function installImmersive({ send, sendMotion = send, release, screen, ava
   });
   window.addEventListener("blur",release);
   document.addEventListener("visibilitychange",()=>{ if(document.hidden)release(); });
-  return { exit, connected:({ autoEnter = false } = {})=>{
+  return { exit, connected:({ autoEnter = false, requestFullscreen = true } = {})=>{
     $("stream-tools").hidden=false;
     $("rotate-screen").disabled=false;
-    if (autoEnter) return enter();
+    if (autoEnter) return enter(requestFullscreen);
   },
     disconnected:async()=>{ $("rotate-screen").disabled=true; $("stream-tools").hidden=true; $("stream-tools").open=false; $("zoom").value=1; $("zoom-level").value="1×"; screen.style.transform=""; await exit(); } };
 }

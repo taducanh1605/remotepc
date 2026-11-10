@@ -9,6 +9,21 @@ const app = readFileSync(new URL("./app.js", import.meta.url), "utf8").replace(/
 const css = readFileSync(new URL("./style.css", import.meta.url), "utf8");
 const manifest = JSON.parse(readFileSync(new URL("./manifest.webmanifest", import.meta.url), "utf8"));
 
+test("gamepads default on and editor blur releases pointer/keys without disconnecting the controller", () => {
+  assert.match(html, /id="gamepad"[^>]*checked/);
+  const release = app.slice(app.indexOf("const release = () => {"), app.indexOf("if (navigator.virtualKeyboard)"));
+  assert.match(release, /preserveGamepads: true/);
+  assert.doesNotMatch(release, /gamepads\.release/);
+  assert.match(app, /window\.addEventListener\("blur", .*gamepads\.release\(\)/);
+  assert.match(app, /channel\.addEventListener\("open", \(\) => \{\s*send\(\{ type: "resize", \.\.\.dimensions\(\) \}\);\s*if \(\$\("gamepad"\)\.checked\) gamepads\.start\(\)/);
+});
+
+test("connection prepares the black stream shell before fullscreen instead of flashing the form twice", () => {
+  const submit = app.slice(app.indexOf('$("connection").addEventListener("submit"'), app.indexOf("const attempt = ++generation"));
+  assert.ok(submit.indexOf('$("stream-shell").hidden = false') < submit.indexOf("requestFullscreenInGesture("));
+  assert.match(submit, /\$\("stream-loading"\)\.hidden = false/);
+});
+
 test("browser handles installation without custom buttons or suppressed prompts", () => {
   assert.doesNotMatch(html, /id="install(?:-stream)?"/);
   assert.doesNotMatch(app, /beforeinstallprompt|pendingInstall/);
@@ -420,7 +435,7 @@ test("ESP Wake selects fullscreen and automatically submits a redeemed host cred
   assert.equal(context.remoteLaunch, undefined);
   assert.deepEqual(context.requests.map(url => new URL(url).pathname), ["/api/connect-prepare", "/api/connect"]);
   assert.match(app, /\$\("connect-fullscreen"\)\.checked = true/);
-  assert.match(app, /immersive\.connected\(\{ autoEnter: \$\("connect-fullscreen"\)\.checked \}\)/);
+  assert.match(app, /immersive\.connected\(\{ autoEnter: \$\("connect-fullscreen"\)\.checked, requestFullscreen: false \}\)/);
 });
 
 test("prepared handoff is single-flight and needs no suspended ESPWake broker", async () => {

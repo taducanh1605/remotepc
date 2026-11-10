@@ -92,6 +92,16 @@ async function withImmersive(run) {
   }
 }
 
+test("connection completion does not issue a late fullscreen transition after preconnect denial", async () => {
+  await withImmersive(async ({ immersive, state, classes, element }) => {
+    await immersive.connected({ autoEnter: true, requestFullscreen: false });
+    assert.equal(state.requests, 0);
+    assert.ok(classes.has("immersive"));
+    await element("stream-shell").handlers.pointerdown();
+    assert.equal(state.requests, 1);
+  });
+});
+
 test("ESPWake auto immersive acquires keyboard capture when preconnect already entered fullscreen", async () => {
   await withImmersive(async ({ immersive, state, document, classes }) => {
     document.fullscreenElement = {};

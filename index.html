@@ -27,6 +27,7 @@
     <p id="status" role="status" aria-live="polite">Disconnected. Use a trusted HTTPS certificate on your host.</p>
     <p id="handoff-recovery" hidden><a href="https://taducanh1605.github.io/espwake/">Return to ESPWake and open RemotePC again</a></p>
     <section id="stream-shell" aria-label="Remote stream" hidden>
+      <p id="stream-loading" role="status" hidden>Connecting…</p>
       <video id="screen" autoplay muted playsinline tabindex="0" aria-label="Remote desktop. Focus to send keyboard input."></video>
       <details id="stream-tools" hidden>
         <summary aria-label="Remote controls" title="Tap to open. Drag to move; arrow keys move, Home resets."><span class="menu-icon" aria-hidden="true"><span></span><span></span><span></span></span></summary>
@@ -64,7 +65,7 @@
         <label for="typing-mode">Text input</label>
         <select id="typing-mode"><option value="host">Host keyboard / UniKey (US layout)</option><option value="unicode">Direct Unicode / mobile IME</option></select>
         <output id="keyboard-status" role="status" aria-live="polite"></output>
-        <label class="check-option"><input id="gamepad" type="checkbox" disabled> Enable gamepads</label>
+        <label class="check-option"><input id="gamepad" type="checkbox" checked disabled> Enable gamepads</label>
         <output id="gamepad-status" role="status" aria-live="polite"></output>
         <button id="right-click">Right click</button>
         <button id="scroll-up" aria-label="Scroll remote desktop up">Scroll ↑</button>
@@ -137,6 +138,6 @@
       <p><a href="https://github.com/taducanh1605/remotepc/releases/latest" target="_blank" rel="noopener">Download Njk Host and Njk Stream releases</a></p>
     </details>
   </main>
-  <script type="module" src="./app.js?v=20261109-rotate"></script>
+  <script type="module" src="./app.js?v=20261110-stability"></script>
 </body>
 </html>

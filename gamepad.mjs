@@ -64,6 +64,7 @@ export function installGamepads({ send, available, report, getGamepads = () => n
     start() { enabled = true; if (frame === undefined) poll(); },
     stop() { enabled = false; release(); },
     release,
+    refresh() { previous.clear(); },
     resume() { if (enabled && frame === undefined) poll(); },
   };
 }
