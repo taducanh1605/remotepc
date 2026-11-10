@@ -13,6 +13,7 @@ import {
   visibleViewport,
 } from "./protocol.mjs?v=20261110-latency";
 import { controlLatency } from "./latency.mjs?v=20261110-rtt";
+import { separateStreamsSupported, gatherOffer } from "./input-transport.mjs?v=20261110-split";
 import { installImmersive } from "./immersive.mjs?v=20261110-stability";
 import { installGamepads } from "./gamepad.mjs?v=20261110-stability";
 import { installKeyboardAccessory } from "./keyboard-accessory.mjs?v=20261109-accessory";
@@ -20,7 +21,7 @@ import { installFloatingMenu } from "./floating-menu.mjs?v=20261109-menu1";
 
 const $ = (id) => document.getElementById(id);
 const screen = $("screen");
-let pc, channel, motionChannel, endpoint, token, sessionId, resizeTimer, motionFrame, statsTimer, latencyTimer;
+let pc, inputPeer, audioPeer, channel, motionChannel, endpoint, token, sessionId, resizeTimer, motionFrame, statsTimer, latencyTimer;
 let generation = 0;
 let backend = "standalone";
 let queuePosition = 0;
@@ -266,8 +267,10 @@ async function stopSession(notify) {
   motionChannel?.close();
   await stopMicrophone();
   micChannel?.close();
+  inputPeer?.close();
+  audioPeer?.close();
   pc?.close();
-  channel = motionChannel = pc = undefined;
+  channel = motionChannel = pc = inputPeer = audioPeer = undefined;
   screen.srcObject = null;
   screen.muted = true;
   $("playback-status").textContent = "";
@@ -337,19 +340,24 @@ $("connection").addEventListener("submit", async (event) => {
     token = $("token").value;
     if (token.length < 32) throw new Error("Access token must contain at least 32 characters.");
     $("token").value = "";
+    const separateStreams = await separateStreamsSupported(endpoint, token);
+    if (attempt !== generation) return;
     status("Negotiating authenticated WebRTC…");
     const peer = new RTCPeerConnection();
-    let disconnectTimer;
     let captureFailure = "";
     pc = peer;
+    const controls = separateStreams ? new RTCPeerConnection() : peer;
+    const sound = separateStreams ? new RTCPeerConnection() : peer;
+    inputPeer = separateStreams ? controls : undefined;
+    audioPeer = separateStreams ? sound : undefined;
     const video = peer.addTransceiver("video", { direction: "recvonly" });
     const h264 = RTCRtpReceiver.getCapabilities("video")?.codecs.filter((codec) => codec.mimeType.toLowerCase() === "video/h264");
     if (!h264?.length) throw new Error("This browser does not support H.264 WebRTC decoding.");
     video.setCodecPreferences(h264);
-    peer.addTransceiver("audio", { direction: "recvonly" });
-    channel = peer.createDataChannel("input", { ordered: true });
-    motionChannel = peer.createDataChannel("motion", { ordered: false, maxRetransmits: 0 });
-    micChannel = peer.createDataChannel("microphone", { ordered: false, maxRetransmits: 0 });
+    sound.addTransceiver("audio", { direction: "recvonly" });
+    channel = controls.createDataChannel("input", { ordered: true });
+    motionChannel = controls.createDataChannel("motion", { ordered: false, maxRetransmits: 0 });
+    micChannel = sound.createDataChannel("microphone", { ordered: false, maxRetransmits: 0 });
     channel.addEventListener("open", () => {
       send({ type: "resize", ...dimensions() });
       if ($("gamepad").checked) gamepads.start();
@@ -382,7 +390,7 @@ $("connection").addEventListener("submit", async (event) => {
         }
         if (message.type === "latency-budget") {
           $("quality-request").textContent = message.atMinimum
-            ? "Control RTT remains over 20 ms at minimum video bitrate. Check Wi-Fi/WAN latency or device load; the target cannot be guaranteed."
+            ? "Video is at minimum bitrate (300 kbps) after latency spikes. Quality will recover when control RTT stabilizes."
             : `Prioritizing input: requesting ${message.bitrateKbps} kbps video · control RTT target <20 ms.`;
         }
         if (message.type === "text-focus" && typeof message.editable === "boolean") {
@@ -452,7 +460,7 @@ $("connection").addEventListener("submit", async (event) => {
         $("latency").textContent = `Control RTT: ${Math.round(median)} ms median · p95 ${Math.ceil(p95)} ms · max ${Math.ceil(max)} ms · target <20 ms${p95 >= 20 ? " — over budget; check network/device load" : ""}`;
       } catch { /* Ignore messages outside the motion protocol. */ }
     });
-    peer.addEventListener("track", ({ track, receiver, streams }) => {
+    const receiveTrack = ({ track, receiver, streams }) => {
       if (pc !== peer) return;
       for (const property of ["jitterBufferTarget", "playoutDelayHint"]) {
         if (!(property in receiver)) continue;
@@ -466,34 +474,35 @@ $("connection").addEventListener("submit", async (event) => {
       if (!stream.getTracks().includes(track)) stream.addTrack(track);
       if (screen.srcObject !== stream) screen.srcObject = stream;
       startPlayback();
-    });
-    peer.addEventListener("connectionstatechange", () => {
-      if (pc !== peer) return;
-      clearTimeout(disconnectTimer);
-      if (peer.connectionState === "disconnected") {
-        status(captureFailure || "Network interrupted. Waiting up to 10 seconds for ICE to recover…");
-        disconnectTimer = setTimeout(() => {
-          if (pc === peer && peer.connectionState === "disconnected") stop().then(() => status(captureFailure || "Network did not recover. Reconnect when the host is reachable."));
-        }, 10000);
-      } else if (["failed", "closed"].includes(peer.connectionState)) {
-        stop().then(() => status(captureFailure || "Connection lost. Check host DNS, network/firewall, trusted TLS certificate, and UDP/ICE or TURN configuration."));
-      }
-    });
-    await peer.setLocalDescription(await peer.createOffer());
-    if (peer.iceGatheringState !== "complete") {
-      await new Promise((resolve, reject) => {
-        const timer = setTimeout(() => { peer.removeEventListener("icegatheringstatechange", check); reject(new Error("ICE gathering timed out.")); }, 12000);
-        function check() {
-          if (peer.iceGatheringState === "complete") { clearTimeout(timer); peer.removeEventListener("icegatheringstatechange", check); resolve(); }
+    };
+    peer.addEventListener("track", receiveTrack);
+    if (separateStreams) sound.addEventListener("track", receiveTrack);
+    function watchConnection(transport, name) {
+      let recoveryTimer;
+      transport.addEventListener("connectionstatechange", () => {
+        if (pc !== peer) return;
+        clearTimeout(recoveryTimer);
+        if (transport.connectionState === "disconnected") {
+          status(captureFailure || `${name} network interrupted. Waiting up to 10 seconds for ICE to recover…`);
+          recoveryTimer = setTimeout(() => {
+            if (pc === peer && transport.connectionState === "disconnected") stop().then(() => status(captureFailure || `${name} network did not recover. Reconnect when the host is reachable.`));
+          }, 10000);
+        } else if (["failed", "closed"].includes(transport.connectionState)) {
+          stop().then(() => status(captureFailure || `${name} connection lost. Check host DNS, network/firewall, trusted TLS certificate, and UDP/ICE or TURN configuration.`));
         }
-        peer.addEventListener("icegatheringstatechange", check);
-        check();
       });
     }
+    watchConnection(peer, "Video");
+    if (separateStreams) {
+      watchConnection(controls, "Input");
+      watchConnection(sound, "Audio");
+    }
+    await Promise.all([gatherOffer(peer), ...(separateStreams ? [gatherOffer(controls), gatherOffer(sound)] : [])]);
+    if (attempt !== generation) return;
     const offerEndpoint = endpoint, offerToken = token, offeredDimensions = dimensions();
     const response = await fetch(offerEndpoint, {
       method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ sdp: peer.localDescription.sdp, ...offeredDimensions, ...requestedQuality(), ...(viewerId ? { clientId: viewerId } : {}) }),
+      body: JSON.stringify({ sdp: peer.localDescription.sdp, ...offeredDimensions, ...requestedQuality(), ...(viewerId ? { clientId: viewerId } : {}), ...(separateStreams ? { inputSdp: controls.localDescription.sdp, audioSdp: sound.localDescription.sdp } : {}) }),
       cache: "no-store", signal: AbortSignal.timeout(20000),
     });
     if (!response.ok) {
@@ -513,6 +522,7 @@ $("connection").addEventListener("submit", async (event) => {
       return;
     }
     sessionId = answer.id;
+    if (separateStreams && (!answer.inputSdp || !answer.audioSdp)) throw new Error("Host did not negotiate the requested separate audio/input connections.");
     backend = answer.capture;
     capabilities = { touch: answer.capabilities?.touch === true, pen: answer.capabilities?.pen === true, gamepad: answer.capabilities?.gamepad === true, gamepadFocusRetention: answer.capabilities?.gamepadFocusRetention === true, latencyControl: answer.capabilities?.latencyControl === true };
     $("gamepad").disabled = !capabilities.gamepad;
@@ -523,6 +533,9 @@ $("connection").addEventListener("submit", async (event) => {
     $("input-capabilities").textContent = backend === "native-host"
       ? `Host input: ${capabilities.touch ? "multitouch" : "no multitouch"} · ${capabilities.pen ? "stylus pressure/tilt/eraser" : "no stylus input"}. Unsupported inputs are not converted to mouse.`
       : "Standalone gateway supports mouse input only; native multitouch and stylus are unavailable.";
+    $("input-capabilities").textContent += separateStreams
+      ? " Video, audio and input use three independent encrypted WebRTC connections."
+      : " Legacy Host: input shares the media WebRTC connection.";
     $("microphone").disabled = !answer.microphone;
     $("apply-quality").disabled = answer.capabilities?.quality !== true;
     $("exit-quit").disabled = answer.capabilities?.quit !== true;
@@ -532,6 +545,10 @@ $("connection").addEventListener("submit", async (event) => {
     }
     lastDimensions = offeredDimensions;
     await peer.setRemoteDescription({ type: "answer", sdp: answer.sdp });
+    if (separateStreams) await Promise.all([
+      controls.setRemoteDescription({ type: "answer", sdp: answer.inputSdp }),
+      sound.setRemoteDescription({ type: "answer", sdp: answer.audioSdp }),
+    ]);
     $("connection").hidden = true;
     $("stream-shell").hidden = false;
     document.body.classList.add("streaming");

@@ -581,7 +581,7 @@ test("same-window certificate approval after 120 seconds renews through saved ES
 test("legacy manual offers preserve their payload while ESPWake supplies the replacement identity", () => {
   const expression = app.match(/body: JSON\.stringify\((\{ sdp: peer\.localDescription\.sdp[^\n]+)\),/)[1];
   const context = { peer: { localDescription: { sdp: "test-sdp" } },
-    offeredDimensions: { width: 750, height: 1624 }, requestedQuality: () => ({ fps: 60, bitrateKbps: 8000 }) };
+    separateStreams: false, offeredDimensions: { width: 750, height: 1624 }, requestedQuality: () => ({ fps: 60, bitrateKbps: 8000 }) };
   const manual = runInNewContext(`(${expression})`, { ...context, viewerId: undefined });
   assert.equal(Object.hasOwn(manual, "clientId"), false);
   const handoff = runInNewContext(`(${expression})`, { ...context, viewerId: "a".repeat(32) });
@@ -722,7 +722,7 @@ test("both media receivers request low buffering and terminal capture failures r
   assert.match(app, /\["jitterBufferTarget", "playoutDelayHint"\]/);
   assert.match(app, /screen\.srcObject \|\| streams\[0\]/);
   assert.match(app, /if \(screen\.srcObject !== stream\) screen\.srcObject = stream/);
-  assert.match(app, /captureFailure \|\| "Connection lost/);
+  assert.match(app, /captureFailure \|\| `\$\{name\} connection lost/);
   assert.match(app, /\["capture-failed", "started"\]/);
   assert.match(app, /console\.warn\(`Could not set/);
 });

@@ -5,7 +5,7 @@ import { runInNewContext } from "node:vm";
 
 test("production ontrack preserves independently grouped audio and video", async () => {
   const source = readFileSync(new URL("./app.js", import.meta.url), "utf8");
-  const handler = source.match(/peer\.addEventListener\("track", (\(\{ track, receiver, streams \}\) => \{[\s\S]*?)\n    \}\);/);
+  const handler = source.match(/const receiveTrack = (\(\{ track, receiver, streams \}\) => \{[\s\S]*?)\n    \};/);
   assert.ok(handler, "production track callback not found");
   let attached = null, assignments = 0, playCount = 0;
   const peer = {}, screen = {
@@ -27,4 +27,6 @@ test("production ontrack preserves independently grouped audio and video", async
   assert.deepEqual(screen.srcObject.tracks, [video, audio]);
   assert.equal(playCount, 2);
   assert.equal(assignments, 1, "a second track must not reset the video element");
+  assert.match(source, /peer\.addEventListener\("track", receiveTrack\)/);
+  assert.match(source, /if \(separateStreams\) sound\.addEventListener\("track", receiveTrack\)/);
 });
