@@ -16,15 +16,15 @@
   </header>
   <main>
     <form id="connection">
-      <label for="host">Browser gateway HTTPS address (grouped ports: Host base + 22; legacy: 47990)</label>
+      <label for="host">Host address</label>
       <input id="host" name="host" type="url" placeholder="https://host.example:32027" required autocomplete="url" spellcheck="false">
       <button id="trust-host" type="button">Trust host certificate…</button>
       <label for="token">Access token</label>
       <input id="token" name="token" type="password" required minlength="32" autocomplete="off" spellcheck="false">
-      <label class="check-option"><input id="connect-fullscreen" type="checkbox"> Enter fullscreen before connecting (manual opt-in; ESPWake does not enable it)</label>
+      <label class="check-option"><input id="connect-fullscreen" type="checkbox"> Fullscreen</label>
       <button type="submit" id="connect">Connect</button>
     </form>
-    <p id="status" role="status" aria-live="polite">Disconnected. Use a trusted HTTPS certificate on your host.</p>
+    <p id="status" role="status" aria-live="polite">Disconnected</p>
     <p id="handoff-recovery" hidden><a href="https://taducanh1605.github.io/espwake/">Return to ESPWake and open RemotePC again</a></p>
     <section id="stream-shell" aria-label="Remote stream" hidden>
       <p id="stream-loading" role="status" hidden>Connecting…</p>
@@ -50,11 +50,11 @@
         <button id="desktop-audio" disabled>Mute desktop audio</button>
         <output id="playback-status" role="status" aria-live="polite"></output>
         <label for="stream-fps">Frame rate</label>
-        <select id="stream-fps"><option value="60">60 FPS</option><option value="120">120 FPS (high-refresh device)</option><option value="90">90 FPS</option><option value="30">30 FPS (data saver)</option></select>
+        <select id="stream-fps"><option value="60">60 FPS</option><option value="120">120 FPS</option><option value="90">90 FPS</option><option value="30">30 FPS</option></select>
         <label for="stream-detail">Desktop detail</label>
-        <select id="stream-detail"><option value="auto">Match device pixels (up to 2×)</option><option value="1">Standard (1×)</option><option value="2">High detail (2×)</option></select>
+        <select id="stream-detail"><option value="auto">Auto</option><option value="1">Standard (1×)</option><option value="2">High (2×)</option></select>
         <label for="stream-bitrate">Bitrate limit</label>
-        <select id="stream-bitrate"><option value="auto">Automatic (input latency first)</option><option value="1000">1 Mbps</option><option value="2000">2 Mbps</option><option value="4000">4 Mbps</option><option value="8000">8 Mbps</option><option value="12000">12 Mbps</option><option value="20000">20 Mbps</option></select>
+        <select id="stream-bitrate"><option value="auto">Auto</option><option value="1000">1 Mbps</option><option value="2000">2 Mbps</option><option value="4000">4 Mbps</option><option value="8000">8 Mbps</option><option value="12000">12 Mbps</option><option value="20000">20 Mbps</option></select>
         <button id="apply-quality" disabled>Apply quality</button>
         <output id="video-quality">Video quality: negotiating…</output>
         <output id="quality-request" role="status" aria-live="polite"></output>
@@ -94,50 +94,7 @@
         <button id="exit-quit" type="button">Quit session</button>
       </dialog>
     </section>
-    <details>
-      <summary>Controls, permissions and limitations</summary>
-      <p>Focus the video to send keys. Native hosts that advertise support receive independent multitouch contacts and stylus pressure, tilt and eraser input.
-        Standalone capture uses mouse input. Tap a host text field once to focus it, then again to open the phone keyboard.
-        The menu starts on the left. Drag its three-line handle to move it; arrow keys move the focused handle and Home resets it.
-        Its saved position stays inside the stream after rotation. The floating menu provides extra keyboard keys, right click, scroll, microphone and manual keyboard controls.
-        Open the floating menu to use Esc, Tab, arrows, Alt, Ctrl and Shift, with or without the on-screen keyboard.
-        Tap a modifier to latch it, tap again to release, or hold it temporarily.
-        Rotate screen switches portrait/landscape where the browser supports orientation lock, entering fullscreen if required.
-        Exit immersive restores automatic rotation. Unsupported browsers require rotating the device manually.
-        Fullscreen and keyboard lock are best-effort: browser/OS shortcuts, secure desktops and Ctrl+Alt+Delete cannot be captured.
-        Press Escape to leave fullscreen. Standalone resize changes encoded video only; the native backend can change host display mode subject to ownership.
-        Use the browser's built-in install action to install the PWA.</p>
-      <p>GitHub Pages serves this app only. The host runs the separate TLS WebRTC gateway. Allow your browser's local-network
-        permission if prompted. A trusted host certificate and reachable UDP ICE path (or your own TURN server) are required.</p>
-      <p>Trust host certificate opens the gateway's HTTPS page in a separate window. Any browser certificate warning must be accepted manually;
-        the app never bypasses TLS verification. The page signals completion only to this allowlisted PWA origin.</p>
-      <p>Microphone is opt-in, requires browser permission, and is available only when the native host advertises a configured virtual-cable sink.
-        It is never enabled automatically. Standalone desktop sound requires a configured Windows system-audio loopback device, not a microphone.</p>
-      <p>The standalone fallback captures the Windows virtual desktop with FFmpeg, separately from Njk Host's native sessions;
-        it does not arbitrate native virtual-display ownership. Njk Host includes the integrated native browser backend:
-        run its packaged gateway in native mode with matching authentication and trusted TLS. No user coding is required.
-        Access tokens grant desktop control; keep them secret.</p>
-      <p>Immersive mode requests fullscreen and keyboard lock where available. Exit using the three-line menu or Escape.
-        Android navigation/back gestures, Windows shortcuts and secure Ctrl+Alt+Delete cannot universally be intercepted.
-        Remote Win, Alt+Tab and Esc buttons inject supported host keys; Ctrl+Alt+Delete is not offered because this host cannot inject the secure sequence.
-        The local magnifier changes only your view, not host resolution. Streaming defaults to 60 FPS. 90/120 FPS require an updated Host, capable encoder, decoder and high-refresh display; 4K is limited to 60 FPS by H.264 level 5.2. More FPS cannot compensate for an overloaded network.
-        Quality requests and actual encoder application are reported separately.</p>
-      <p>Desktop detail matches the device pixel density up to 2×, bounded to 3840×2160.
-        Higher detail provides sharper text but more desktop space and uses more bandwidth.
-        Select Standard (1×) if host controls appear too small; the local magnifier can enlarge your view.</p>
-      <p>The monitor button in ESP Wake can connect automatically using a short-lived, single-use ticket.
-        The ticket is removed from browser history before connection; host credentials are not stored on the ESP32 or in browser storage.
-        Expired access is refreshed through the launching ESPWake tab. Disconnect or Quit closes this launched tab only after the host confirms success.</p>
-      <p>Host keyboard mode sends native key events for ASCII text so UniKey/Telex can run on the host; use a US host keyboard layout.
-        Direct Unicode mode sends text already composed by your phone keyboard, including accents and emoji.
-        Automatic soft-keyboard requests require host editable-focus confirmation and browser support. If the phone blocks an automatic request, open the controls menu and tap Keyboard; that direct gesture retries focus and keyboard activation.</p>
-      <p>Enable gamepads to use up to four standard browser-mapped controllers through the host virtual-controller driver.
-        Press a controller button after connecting so the browser can expose it. Input stops on blur, hidden pages or disconnect.</p>
-      <p>Native Windows touch and stylus (including pressure, tilt and eraser) are enabled only when the host advertises those capabilities.
-        The displayed control RTT measures the motion data channel round trip to the gateway; it is not end-to-end video/display latency.</p>
-      <p><a href="https://github.com/taducanh1605/remotepc/releases/latest" target="_blank" rel="noopener">Download Njk Host and Njk Stream releases</a></p>
-    </details>
   </main>
-  <script type="module" src="./app.js?v=20261110-ports1"></script>
+  <script type="module" src="./app.js?v=20261110-clean1"></script>
 </body>
 </html>

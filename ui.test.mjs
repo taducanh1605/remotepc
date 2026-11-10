@@ -9,6 +9,18 @@ const app = readFileSync(new URL("./app.js", import.meta.url), "utf8").replace(/
 const css = readFileSync(new URL("./style.css", import.meta.url), "utf8");
 const manifest = JSON.parse(readFileSync(new URL("./manifest.webmanifest", import.meta.url), "utf8"));
 
+test("connection UI stays concise and keeps help prose out of the main page", () => {
+  assert.match(html, /<label for="host">Host address<\/label>/);
+  assert.match(html, /id="connect-fullscreen" type="checkbox"> Fullscreen<\/label>/);
+  assert.match(html, /id="status"[^>]*>Disconnected<\/p>/);
+  assert.doesNotMatch(html, /Controls, permissions and limitations|Host base \+ 22; legacy/);
+  assert.equal((html.match(/<details\b/g) || []).length, 1);
+  assert.match(html, /<details id="stream-tools" hidden>/);
+  for (const id of ["host", "token", "connect", "trust-host", "stream-fps", "stream-detail", "stream-bitrate"]) {
+    assert.ok(html.includes(`id="${id}"`), `essential control ${id} remains available`);
+  }
+});
+
 test("applying 120 FPS after reducing 4K detail sends viewport before quality", () => {
   const events = [], button = { addEventListener(_type, callback) { this.apply = callback; } };
   const controls = { "apply-quality": button, "quality-request": {} };
@@ -94,7 +106,6 @@ test("remote controls float over video and expose microphone and connection acti
   assert.match(html, /<summary aria-label="Remote controls"[^>]*><span class="menu-icon"/);
   assert.match(html, /id="latency" aria-live="polite"/);
   assert.match(html, /id="input-capabilities" role="status"/);
-  assert.match(html, /control RTT measures the motion data channel round trip/i);
   assert.match(css, /#stream-tools\s*\{[^}]*position:\s*absolute/);
 });
 
