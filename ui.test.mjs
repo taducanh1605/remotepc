@@ -756,4 +756,5 @@ test("motion buffering stays near one MTU and RTT feedback preserves its probe i
   context.motionChannel.readyState = "closed";
   assert.equal(context.sendMotion({ type: "move", x: .3, y: .4 }), false);
   assert.match(app, /if \(sendMotion\(\{ type: "latency-ping", sequence \}\)\) pendingPings\.set/);
+  assert.match(app, /capabilities\.latencyControl \? 250 : 1250/);
 });

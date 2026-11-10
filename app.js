@@ -436,7 +436,7 @@ $("connection").addEventListener("submit", async (event) => {
         if (motionChannel?.readyState !== "open" || pendingPings.size >= 2) return;
         const sequence = ++pingSequence;
         if (sendMotion({ type: "latency-ping", sequence })) pendingPings.set(sequence, now);
-      }, 250);
+      }, capabilities.latencyControl ? 250 : 1250);
     });
     motionChannel.addEventListener("message", (event) => {
       try {
