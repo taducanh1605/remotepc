@@ -21,6 +21,12 @@ test("connection UI stays concise and keeps help prose out of the main page", ()
   }
 });
 
+test("latency adaptation displays the negotiated budget rather than an obsolete 20ms target", () => {
+  const handler = app.slice(app.indexOf('if (message.type === "latency-budget")'), app.indexOf('if (message.type === "text-focus"'));
+  assert.match(handler, /message\.targetMs/);
+  assert.doesNotMatch(handler, /<20 ms/);
+});
+
 test("applying 120 FPS after reducing 4K detail sends viewport before quality", () => {
   const events = [], button = { addEventListener(_type, callback) { this.apply = callback; } };
   const controls = { "apply-quality": button, "quality-request": {} };

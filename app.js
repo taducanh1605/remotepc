@@ -390,8 +390,8 @@ $("connection").addEventListener("submit", async (event) => {
         }
         if (message.type === "latency-budget") {
           $("quality-request").textContent = message.atMinimum
-            ? "Video is at minimum bitrate (300 kbps) after latency spikes. Quality will recover when control RTT stabilizes."
-            : `Prioritizing input: requesting ${message.bitrateKbps} kbps video · control RTT target <20 ms.`;
+            ? "Video: 300 kbps · Waiting for network recovery."
+            : `Video: ${message.bitrateKbps} kbps · RTT budget ${message.targetMs} ms.`;
         }
         if (message.type === "text-focus" && typeof message.editable === "boolean") {
           if (message.checkOnly === true) {
