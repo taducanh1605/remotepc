@@ -9,8 +9,9 @@ import {
   playDesktop,
   requestFullscreenInGesture,
   viewportDimensions,
+  videoFrameRate,
   visibleViewport,
-} from "./protocol.mjs?v=20261109-viewport";
+} from "./protocol.mjs?v=20261110-latency";
 import { installImmersive } from "./immersive.mjs?v=20261110-stability";
 import { installGamepads } from "./gamepad.mjs?v=20261110-stability";
 import { installKeyboardAccessory } from "./keyboard-accessory.mjs?v=20261109-accessory";
@@ -57,7 +58,7 @@ const dimensions = () => {
     $("stream-detail").value === "auto" ? window.devicePixelRatio || 1 : Number($("stream-detail").value));
 };
 function requestedQuality() {
-  const fps = Number($("stream-fps").value), size = dimensions();
+  const size = dimensions(), fps = videoFrameRate(size.width, size.height, Number($("stream-fps").value));
   const bitrateKbps = $("stream-bitrate").value === "auto" ? automaticBitrate(size.width, size.height, fps) : Number($("stream-bitrate").value);
   return { fps, bitrateKbps };
 }
@@ -361,6 +362,7 @@ $("connection").addEventListener("submit", async (event) => {
         }
         if (message.type === "leadership") displayLeader = message.leader === true;
         if (message.type === "quality" && message.fps && message.bitrateKbps) {
+          if (message.success !== false) $("stream-fps").value = String(message.fps);
           $("quality-request").textContent = message.success === false
             ? "Host rejected the quality change."
             : `Host accepted ${message.fps} FPS · ${message.bitrateKbps} kbps; waiting for encoder confirmation.`;
@@ -543,9 +545,12 @@ $("connection").addEventListener("submit", async (event) => {
             const seconds = (report.timestamp - previousVideo.timestamp) / 1000;
             const fps = Math.max(0, (report.framesDecoded - previousVideo.framesDecoded) / seconds);
             const kbps = Math.max(0, (report.bytesReceived - previousVideo.bytesReceived) * 8 / seconds / 1000);
-            $("video-quality").textContent = `${fps.toFixed(1)} decoded FPS · ${Math.round(kbps)} kbps · ${report.framesDropped || 0} dropped frames`;
+            const emitted = (report.jitterBufferEmittedCount || 0) - previousVideo.emitted;
+            const bufferMs = emitted > 0 ? Math.max(0, ((report.jitterBufferDelay || 0) - previousVideo.delay) * 1000 / emitted) : 0;
+            $("video-quality").textContent = `${fps.toFixed(1)} decoded FPS · ${Math.round(kbps)} kbps · ${report.framesDropped || 0} dropped frames · ${Math.round(bufferMs)} ms video buffer`;
           }
-          previousVideo = { timestamp: report.timestamp, framesDecoded: report.framesDecoded || 0, bytesReceived: report.bytesReceived || 0 };
+          previousVideo = { timestamp: report.timestamp, framesDecoded: report.framesDecoded || 0, bytesReceived: report.bytesReceived || 0,
+            emitted: report.jitterBufferEmittedCount || 0, delay: report.jitterBufferDelay || 0 };
         }
       }
       if (decoded > 0 && queuePosition === 0) status(`Streaming · ${screen.videoWidth}×${screen.videoHeight} · ${decoded} decoded frames · ${backend === "native-host" ? (displayLeader ? "display leader" : "shared display follower") : "standalone"}`);
@@ -587,6 +592,7 @@ $("exit-disconnect").addEventListener("click", () => leaveSession(false));
 $("exit-quit").addEventListener("click", () => leaveSession(true));
 $("apply-quality").addEventListener("click", () => {
   resized();
+  sendViewport();
   const { fps, bitrateKbps } = requestedQuality();
   send({ type: "quality", fps, bitrateKbps });
   $("quality-request").textContent = `Requested ${fps} FPS · ${bitrateKbps} kbps; waiting for host.`;
@@ -857,18 +863,21 @@ $("remote-text").addEventListener("keyup", event => {
   event.preventDefault();
 });
 $("remote-text").addEventListener("blur", release);
+function sendViewport() {
+  const next = dimensions();
+  if (next.width === lastDimensions?.width && next.height === lastDimensions?.height) return false;
+  if (channel?.readyState !== "open") return false;
+  lastDimensions = next;
+  send({ type: "resize", ...next });
+  return true;
+}
 const resized = () => {
   observeKeyboardGeometry();
   document.documentElement.style.setProperty("--viewport-height", `${viewport().height}px`);
   document.documentElement.style.setProperty("--viewport-top", "0px");
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
-    const next = dimensions();
-    if (next.width === lastDimensions?.width && next.height === lastDimensions?.height) return;
-    if (channel?.readyState !== "open") return;
-    lastDimensions = next;
-    send({ type: "resize", ...next });
-    if ($("stream-bitrate").value === "auto") send({ type: "quality", ...requestedQuality() });
+    if (sendViewport() && $("stream-bitrate").value === "auto") send({ type: "quality", ...requestedQuality() });
   }, 120);
 };
 window.visualViewport?.addEventListener("resize", resized);

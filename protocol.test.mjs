@@ -11,10 +11,20 @@ import {
   playDesktop,
   requestFullscreenInGesture,
   viewportDimensions,
+  videoFrameRate,
   visibleViewport,
 } from "./protocol.mjs";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
+
+test("120 FPS fits level 5.2 at 1440p but not 4K, including portrait", () => {
+  for (const [w, h] of [[1920, 1080], [2560, 1440], [1440, 2560]]) {
+    assert.equal(videoFrameRate(w, h, 120), 120);
+  }
+  assert.equal(videoFrameRate(3840, 2160, 120), 60);
+  assert.equal(videoFrameRate(2160, 3840, 90), 60);
+  assert.equal(videoFrameRate(3840, 2160, 30), 30);
+});
 
 test("blocked audio autoplay still starts video without a touch", async () => {
   const video = { muted: false, calls: 0, async play() {

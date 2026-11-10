@@ -9,6 +9,26 @@ const app = readFileSync(new URL("./app.js", import.meta.url), "utf8").replace(/
 const css = readFileSync(new URL("./style.css", import.meta.url), "utf8");
 const manifest = JSON.parse(readFileSync(new URL("./manifest.webmanifest", import.meta.url), "utf8"));
 
+test("applying 120 FPS after reducing 4K detail sends viewport before quality", () => {
+  const events = [], button = { addEventListener(_type, callback) { this.apply = callback; } };
+  const controls = { "apply-quality": button, "quality-request": {} };
+  const helper = app.slice(app.indexOf("function sendViewport()"), app.indexOf("const resized = () =>"));
+  const handler = app.slice(app.indexOf('$("apply-quality").addEventListener'), app.indexOf("function flushMotions()"));
+  const context = {
+    $: id => controls[id],
+    dimensions: () => ({ width: 1920, height: 1080 }),
+    requestedQuality: () => ({ fps: 120, bitrateKbps: 20000 }),
+    channel: { readyState: "open" },
+    lastDimensions: { width: 3840, height: 2160 },
+    resized() {},
+    send: message => events.push(message),
+  };
+  runInNewContext(helper + handler, context);
+  button.apply();
+  assert.deepEqual(events.map(event => event.type), ["resize", "quality"]);
+  assert.equal(events[1].fps, 120);
+});
+
 test("gamepads default on and editor blur releases pointer/keys without disconnecting the controller", () => {
   assert.match(html, /id="gamepad"[^>]*checked/);
   const release = app.slice(app.indexOf("const release = () => {"), app.indexOf("if (navigator.virtualKeyboard)"));
@@ -699,7 +719,7 @@ test("playback fallback, quality resize and temporary ICE interruption retain th
   assert.match(html, /value="20000"/);
   assert.match(html, /id="stream-detail"/);
   assert.match(app, /window\.devicePixelRatio \|\| 1/);
-  assert.match(app, /if \(\$\("stream-bitrate"\)\.value === "auto"\) send\(\{ type: "quality"/);
+  assert.match(app, /if \(sendViewport\(\) && \$\("stream-bitrate"\)\.value === "auto"\) send\(\{ type: "quality"/);
   assert.match(app, /Waiting up to 10 seconds for ICE to recover/);
 });
 

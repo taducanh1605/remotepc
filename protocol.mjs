@@ -19,6 +19,11 @@ export function automaticBitrate(width, height, fps) {
   return Math.max(2000, Math.min(20000, Math.floor(width * height * fps / 6000)));
 }
 
+export function videoFrameRate(width, height, fps) {
+  const macroblocks = Math.ceil(width / 16) * Math.ceil(height / 16);
+  return macroblocks * fps > 2073600 ? Math.min(60, fps) : fps;
+}
+
 export async function playDesktop(video, enableAudio = false) {
   if (enableAudio) video.muted = false;
   try {
