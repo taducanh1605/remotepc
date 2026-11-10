@@ -79,16 +79,18 @@ test("viewport sizes are even, bounded and rotated", () => {
     assert.equal(height % 2, 0);
   }
 });
-test("desktop scale defaults preserve resolution and automatic scale matches CSS device size", () => {
+test("Windows DPI defaults preserve resolution and DPI canvas never imitates scaling by reducing pixels", () => {
   for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }, { width: 1440, height: 900 }]) {
     const unchanged = desktopViewport(viewport, 3);
     assert.deepEqual({ width: unchanged.width, height: unchanged.height }, viewportDimensions(viewport, 3));
     const auto = desktopViewport(viewport, 3, 100, true);
     assert.equal(auto.scalePercent, 200);
-    assert.deepEqual({ width: auto.width, height: auto.height }, viewportDimensions(viewport));
+    assert.ok(auto.width >= unchanged.width && auto.height >= unchanged.height);
+    assert.ok(auto.width >= 1600 && auto.height >= 1200);
   }
-  assert.deepEqual(desktopViewport({ width: 390, height: 844 }, 2, 200), { width: 390, height: 844, scalePercent: 200 });
-  assert.deepEqual(desktopViewport({ width: 390, height: 844 }, 2, 150), { width: 520, height: 1124, scalePercent: 150 });
+  assert.deepEqual(desktopViewport({ width: 390, height: 844 }, 2, 200), { width: 1600, height: 3462, scalePercent: 200 });
+  assert.deepEqual(desktopViewport({ width: 390, height: 844 }, 2, 150), { width: 1200, height: 2596, scalePercent: 150 });
+  assert.deepEqual(desktopViewport({ width: 390, height: 844 }, 2, 200, false, false), { width: 780, height: 1688, scalePercent: 200 });
   assert.deepEqual(desktopViewport({ width: 390, height: 844 }, 1, 200, true), { width: 390, height: 844, scalePercent: 100 });
 });
 test("desktop scale is bounded after rotation, keyboard geometry and codec resolution limits", () => {
@@ -97,7 +99,8 @@ test("desktop scale is bounded after rotation, keyboard geometry and codec resol
       for (const scale of [100, 125, 150, 200, 300]) {
         const result = desktopViewport(viewport, 3, scale, automatic);
         assert.ok(result.width >= 320 && result.width <= 3840);
-        assert.ok(result.height >= 240 && result.height <= 2160);
+        assert.ok(result.height >= 240 && result.height <= 3840);
+        assert.ok(result.width * result.height <= 3840 * 2160);
         assert.equal(result.width % 2, 0);
         assert.equal(result.height % 2, 0);
       }

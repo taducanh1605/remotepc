@@ -53,9 +53,9 @@
         <select id="stream-fps"><option value="60">60 FPS</option><option value="120">120 FPS</option><option value="90">90 FPS</option><option value="30">30 FPS</option></select>
         <label for="stream-detail">Desktop detail</label>
         <select id="stream-detail"><option value="auto">Auto</option><option value="1">Standard (1×)</option><option value="2">High (2×)</option></select>
-        <label for="desktop-scale">Desktop scale</label>
-        <select id="desktop-scale"><option value="100">100%</option><option value="125">125%</option><option value="150">150%</option><option value="175">175%</option><option value="200">200%</option><option value="250">250%</option><option value="300">300%</option></select>
-        <label class="check-option"><input id="auto-desktop-scale" type="checkbox"> Auto desktop scale</label>
+        <label for="desktop-scale">Windows DPI</label>
+        <select id="desktop-scale"><option value="0">System</option><option value="100">100%</option><option value="125">125%</option><option value="150">150%</option><option value="175">175%</option><option value="200">200%</option><option value="225">225%</option><option value="250">250%</option><option value="300">300%</option></select>
+        <label class="check-option"><input id="auto-desktop-scale" type="checkbox"> Auto DPI</label>
         <output id="desktop-scale-status" role="status" aria-live="polite"></output>
         <label for="stream-bitrate">Bitrate limit</label>
         <select id="stream-bitrate"><option value="auto">Auto</option><option value="1000">1 Mbps</option><option value="2000">2 Mbps</option><option value="4000">4 Mbps</option><option value="8000">8 Mbps</option><option value="12000">12 Mbps</option><option value="20000">20 Mbps</option></select>
@@ -100,6 +100,6 @@
       </dialog>
     </section>
   </main>
-  <script type="module" src="./app.js?v=20261110-scale1"></script>
+  <script type="module" src="./app.js?v=20261110-dpi1"></script>
 </body>
 </html>

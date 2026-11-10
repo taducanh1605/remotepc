@@ -57,51 +57,78 @@ test("RTT bitrate adaptation is a persisted default-off menu option negotiated a
   assert.doesNotMatch(app, /target <20 ms/);
 });
 
-test("desktop scale is persisted, auto-calculated and applied live through session resize", () => {
+test("Windows DPI is persisted separately from old render scale and sent as a real native control", () => {
   assert.match(html, /id="auto-desktop-scale" type="checkbox"/);
   assert.doesNotMatch(html, /id="auto-desktop-scale"[^>]*checked/);
-  assert.match(html, /<label for="desktop-scale">Desktop scale<\/label>/);
+  assert.match(html, /<label for="desktop-scale">Windows DPI<\/label>/);
   const setup = app.slice(app.indexOf("try {\n  const savedScale"), app.indexOf("async function waitForViewport()"));
   const controls = {
-    "desktop-scale": { value: "100", options: ["100","125","150","175","200","250","300"].map(value => ({ value })) },
+    "desktop-scale": { value: "0", options: ["0","100","125","150","175","200","225","250","300"].map(value => ({ value })) },
     "auto-desktop-scale": { checked: false },
     "stream-detail": { value: "auto" },
     "desktop-scale-status": {},
     zoom: { value: 2, dispatchEvent() {} },
   };
   for (const control of Object.values(controls)) control.addEventListener = function(_type, callback) { this.change = callback; };
-  const saved = new Map(), events = [];
+  const saved = new Map([["njk-desktop-scale", "200"], ["njk-auto-desktop-scale", "true"]]), events = [], messages = [];
   const context = {
     $: id => controls[id],
     localStorage: { getItem: key => saved.get(key) ?? null, setItem: (key, value) => saved.set(key, value) },
     screen: { videoWidth: 780, videoHeight: 1688, addEventListener() {} }, desktopViewport,
     viewport: () => ({ width: 390, height: 844 }), window: { devicePixelRatio: 3 },
     backend: "native-host", displayLeader: true,
+    capabilities: { desktopScale: true }, channel: { readyState: "open" }, send: message => messages.push(message),
     release: () => events.push("release"), resized: () => events.push("resize"),
     Event: class {}, status: message => { throw new Error(message); },
   };
   runInNewContext(setup, context);
   assert.equal(controls["auto-desktop-scale"].checked, false);
+  assert.equal(controls["desktop-scale"].value, "0");
   assert.equal(controls["desktop-scale"].disabled, false);
   controls["auto-desktop-scale"].checked = true;
   controls["auto-desktop-scale"].change();
   assert.equal(controls["desktop-scale"].disabled, true);
-  assert.match(controls["desktop-scale-status"].textContent, /200% · 390×844/);
+  context.applyDesktopScale();
+  assert.equal(messages.at(-1).type, "desktop-scale");
+  assert.equal(messages.at(-1).scalePercent, 200);
+  assert.equal(messages.at(-1).autoScale, true);
   assert.deepEqual(events, ["release", "resize"]);
   assert.equal(controls.zoom.value, 1);
-  assert.equal(saved.get("njk-auto-desktop-scale"), "true");
+  assert.equal(saved.get("njk-auto-windows-dpi"), "true");
   controls["auto-desktop-scale"].checked = false;
   controls["desktop-scale"].value = "150";
   controls["desktop-scale"].change();
-  assert.match(controls["desktop-scale-status"].textContent, /150% · 520×1124/);
-  assert.equal(saved.get("njk-desktop-scale"), "150");
+  context.applyDesktopScale();
+  assert.equal(messages.at(-1).scalePercent, 150);
+  assert.equal(saved.get("njk-windows-dpi"), "150");
   controls["desktop-scale"].value = "100";
-  runInNewContext(setup, context);
+  runInNewContext(setup, {...context});
   assert.equal(controls["desktop-scale"].value, "150");
   assert.equal(controls["auto-desktop-scale"].checked, false);
   context.displayLeader = false;
   context.updateDesktopScaleStatus();
-  assert.match(controls["desktop-scale-status"].textContent, /scale needs display control/);
+  assert.match(controls["desktop-scale-status"].textContent, /DPI needs display control/);
+  context.capabilities.desktopScale = false;
+  context.updateDesktopScaleStatus();
+  assert.match(controls["desktop-scale-status"].textContent, /Host update required/);
+});
+
+test("lowering Windows DPI preserves the session pixel canvas instead of resizing video", () => {
+  const source = app.slice(app.indexOf("const dimensions ="), app.indexOf("function requestedQuality()"));
+  const scale = { value: "200" };
+  const context = {
+    viewport: () => ({ width: 390, height: 844 }), desktopViewport, window: { devicePixelRatio: 3 },
+    capabilities: { desktopScale: true }, desktopCanvasScale: 0,
+    $: id => id === "desktop-scale" ? scale : id === "stream-detail" ? { value: "auto" } : { checked: false },
+  };
+  runInNewContext(`${source}\nglobalThis.testDimensions = dimensions;`, context);
+  const first = context.testDimensions();
+  assert.equal(first.width, 1600);
+  assert.equal(first.height, 3462);
+  for (const percent of ["150", "125", "0"]) {
+    scale.value = percent;
+    assert.deepEqual(context.testDimensions(), first);
+  }
 });
 
 test("applying 120 FPS after reducing 4K detail sends viewport before quality", () => {
@@ -146,7 +173,7 @@ test("automatic viewport updates preserve the adaptive budget with compatible le
       viewport: () => ({ height: 800 }), resizeTimer: undefined, clearTimeout() {},
       setTimeout: callback => callback(), sendViewport: () => true,
       $: () => ({ value: "auto" }), requestedQuality: () => ({ fps: 60, bitrateKbps: 9216 }),
-      capabilities: { latencyControl }, send: message => events.push(message), updateDesktopScaleStatus() {},
+      capabilities: { latencyControl }, send: message => events.push(message), updateDesktopScaleStatus() {}, applyDesktopScale() {},
     });
     assert.equal(events[0].bitrateKbps, 9216);
     assert.equal(events[0].adaptive, latencyControl ? true : undefined);
@@ -217,6 +244,7 @@ test("PWA resolution uses the entire usable viewport without a reserved accessor
   for (const height of [300, 500, 800]) {
     const result = runInNewContext(`${source}; dimensions()`, {
       viewport: () => ({ width: 400, height }), desktopViewport,
+      capabilities: { desktopScale: false }, desktopCanvasScale: 0,
       $: id => {
         assert.ok(["stream-detail", "desktop-scale", "auto-desktop-scale"].includes(id), "menu visibility must not affect host dimensions");
         return { value: id === "desktop-scale" ? "100" : "1", checked: false };

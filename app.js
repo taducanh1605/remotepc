@@ -11,7 +11,7 @@ import {
   requestFullscreenInGesture,
   videoFrameRate,
   visibleViewport,
-} from "./protocol.mjs?v=20261110-scale1";
+} from "./protocol.mjs?v=20261110-dpi1";
 import { controlLatency } from "./latency.mjs?v=20261110-rtt";
 import { separateStreamsSupported, gatherOffer } from "./input-transport.mjs?v=20261110-split";
 import { installImmersive } from "./immersive.mjs?v=20261110-stability";
@@ -54,11 +54,14 @@ let lastRttAt = 0;
 let motionSequence = 0;
 const status = (text) => { $("status").textContent = $("stream-status").textContent = $("stream-loading").textContent = text; };
 const viewport = () => visibleViewport(window.visualViewport, { width: innerWidth, height: innerHeight }, navigator.virtualKeyboard?.boundingRect);
+let desktopCanvasScale = 0;
 const dimensions = () => {
   const size = viewport();
-  const { width, height } = desktopViewport(size,
-    $("stream-detail").value === "auto" ? window.devicePixelRatio || 1 : Number($("stream-detail").value),
-    Number($("desktop-scale").value), $("auto-desktop-scale").checked);
+  const ratio = $("stream-detail").value === "auto" ? window.devicePixelRatio || 1 : Number($("stream-detail").value);
+  const desired = desktopViewport(size, ratio,
+    Number($("desktop-scale").value), $("auto-desktop-scale").checked, capabilities.desktopScale === true);
+  if (capabilities.desktopScale) desktopCanvasScale = Math.max(desktopCanvasScale, desired.scalePercent);
+  const { width, height } = desktopViewport(size, ratio, desktopCanvasScale, false, capabilities.desktopScale === true);
   return { width, height };
 };
 function requestedQuality() {
@@ -67,32 +70,41 @@ function requestedQuality() {
   return { fps, bitrateKbps };
 }
 try {
-  const savedScale = localStorage.getItem("njk-desktop-scale");
+  const savedScale = localStorage.getItem("njk-windows-dpi");
   if (savedScale !== null) {
     if (![...$("desktop-scale").options].some(option => option.value === savedScale)) throw new Error("Invalid saved desktop scale");
     $("desktop-scale").value = savedScale;
   }
-  $("auto-desktop-scale").checked = localStorage.getItem("njk-auto-desktop-scale") === "true";
+  $("auto-desktop-scale").checked = localStorage.getItem("njk-auto-windows-dpi") === "true";
 } catch (error) { console.warn("Desktop scale could not be restored:", error.message); }
 $("desktop-scale").disabled = $("auto-desktop-scale").checked;
+let lastDesktopScale = "", desktopDpiStatus = "";
 function updateDesktopScaleStatus() {
+  const scope = backend && !capabilities.desktopScale ? "Host update required for Windows DPI"
+    : backend === "native-host" && !displayLeader ? "DPI needs display control" : "";
+  $("desktop-scale-status").textContent = scope || desktopDpiStatus;
+}
+function applyDesktopScale() {
+  if (!capabilities.desktopScale || !displayLeader || channel?.readyState !== "open") return;
   const sizing = desktopViewport(viewport(),
     $("stream-detail").value === "auto" ? window.devicePixelRatio || 1 : Number($("stream-detail").value),
     Number($("desktop-scale").value), $("auto-desktop-scale").checked);
-  const actual = screen.videoWidth && screen.videoHeight && (screen.videoWidth !== sizing.width || screen.videoHeight !== sizing.height)
-    ? ` · Video ${screen.videoWidth}×${screen.videoHeight}` : "";
-  const scope = backend === "native-host" && !displayLeader ? " · Shared desktop: scale needs display control" : backend === "standalone" ? " · Video only" : "";
-  $("desktop-scale-status").textContent = `${sizing.scalePercent}% · ${sizing.width}×${sizing.height}${actual}${scope}`;
+  const key = `${sizing.scalePercent}:${$("auto-desktop-scale").checked}:${sizing.width}:${sizing.height}`;
+  if (key === lastDesktopScale) return;
+  lastDesktopScale = key;
+  desktopDpiStatus = "Applying Windows DPI…";
+  send({ type: "desktop-scale", scalePercent: sizing.scalePercent, autoScale: $("auto-desktop-scale").checked });
 }
 function changeDesktopScale() {
-  $("desktop-scale").disabled = $("auto-desktop-scale").checked;
+  $("desktop-scale").disabled = $("auto-desktop-scale").checked || !!backend && !capabilities.desktopScale;
   try {
-    localStorage.setItem("njk-desktop-scale", $("desktop-scale").value);
-    localStorage.setItem("njk-auto-desktop-scale", String($("auto-desktop-scale").checked));
+    localStorage.setItem("njk-windows-dpi", $("desktop-scale").value);
+    localStorage.setItem("njk-auto-windows-dpi", String($("auto-desktop-scale").checked));
   } catch (error) { status(`Desktop scale could not be saved: ${error.message}`); }
   $("zoom").value = 1;
   $("zoom").dispatchEvent(new Event("input"));
   release();
+  lastDesktopScale = "";
   updateDesktopScaleStatus();
   resized();
 }
@@ -343,6 +355,7 @@ async function stopSession(notify) {
   capabilities = { touch: false, pen: false };
   queuePosition = 0;
   displayLeader = false;
+  desktopCanvasScale = 0;
   contactGenerations.clear();
   pendingPings.clear();
   latencySamples.length = 0;
@@ -413,17 +426,25 @@ $("connection").addEventListener("submit", async (event) => {
         const message = JSON.parse(event.data);
         if (message.type === "queue") {
           queuePosition = message.position;
+          if (!message.active) { displayLeader = false; updateDesktopScaleStatus(); }
           status(message.active ? "Your browser controls the stream; waiting for video frames…" : `Watching the shared stream; ${message.position} browser session(s) ahead for control.`);
           if (message.active) gamepads.resume();
           else gamepads.release();
         }
         if (message.type === "leadership") {
           displayLeader = message.leader === true;
+          if (displayLeader) { lastDesktopScale = ""; resized(); }
+          updateDesktopScaleStatus();
+        }
+        if (message.type === "desktop-scale") {
+          desktopDpiStatus = message.success === true
+            ? `${message.scalePercent}% · ${message.dpi} DPI${message.maximumPercent ? ` · Max ${message.maximumPercent}%` : ""}`
+            : `DPI not applied: ${message.reason || "Host rejected the change"}`;
           updateDesktopScaleStatus();
         }
         if (message.type === "resized") {
           if (message.success === false) $("desktop-scale-status").textContent = "Host could not resize this desktop.";
-          else updateDesktopScaleStatus();
+          else { lastDesktopScale = ""; applyDesktopScale(); updateDesktopScaleStatus(); }
         }
         if (message.type === "quality" && message.fps && message.bitrateKbps) {
           if (message.success !== false) $("stream-fps").value = String(message.fps);
@@ -577,7 +598,11 @@ $("connection").addEventListener("submit", async (event) => {
     sessionId = answer.id;
     if (separateStreams && (!answer.inputSdp || !answer.audioSdp)) throw new Error("Host did not negotiate the requested separate audio/input connections.");
     backend = answer.capture;
-    capabilities = { touch: answer.capabilities?.touch === true, pen: answer.capabilities?.pen === true, gamepad: answer.capabilities?.gamepad === true, gamepadFocusRetention: answer.capabilities?.gamepadFocusRetention === true, latencyControl: answer.capabilities?.latencyControl === true, latencyAdaptation: answer.capabilities?.latencyAdaptation === true };
+    capabilities = { touch: answer.capabilities?.touch === true, pen: answer.capabilities?.pen === true, gamepad: answer.capabilities?.gamepad === true, gamepadFocusRetention: answer.capabilities?.gamepadFocusRetention === true, latencyControl: answer.capabilities?.latencyControl === true, latencyAdaptation: answer.capabilities?.latencyAdaptation === true, desktopScale: answer.capabilities?.desktopScale === true };
+    $("auto-desktop-scale").disabled = !capabilities.desktopScale;
+    $("desktop-scale").disabled = !capabilities.desktopScale || $("auto-desktop-scale").checked;
+    lastDesktopScale = "";
+    desktopDpiStatus = "";
     $("latency-adaptation").disabled = !capabilities.latencyAdaptation;
     $("gamepad").disabled = !capabilities.gamepad;
     if (capabilities.gamepad && $("gamepad").checked) gamepads.start();
@@ -957,6 +982,7 @@ const resized = () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
     if (sendViewport() && $("stream-bitrate").value === "auto") send({ type: "quality", ...requestedQuality(), ...(capabilities.latencyControl ? { adaptive: true } : {}) });
+    applyDesktopScale();
     updateDesktopScaleStatus();
   }, 120);
 };

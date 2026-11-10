@@ -15,13 +15,19 @@ export function viewportDimensions(viewport, pixelRatio = 1) {
   };
 }
 
-export function desktopViewport(viewport, pixelRatio = 1, scalePercent = 100, automatic = false) {
+export function desktopViewport(viewport, pixelRatio = 1, scalePercent = 0, automatic = false, dpiSupported = true) {
   const native = viewportDimensions(viewport, pixelRatio);
   const scale = automatic
     ? Math.max(100, Math.min(300, Math.round(Math.min(native.width / viewport.width, native.height / viewport.height) * 4) * 25))
-    : Math.max(100, Math.min(300, scalePercent));
+    : scalePercent === 0 ? 0 : Math.max(100, Math.min(300, scalePercent));
+  // Windows limits effective DPI when the logical desktop is too small.
+  // Grow the pixel canvas, never downscale it to imitate a DPI change.
+  const grow = dpiSupported && scale > 100 ? Math.max(1, 8 * scale / native.width, 6 * scale / native.height) : 1;
+  const width = native.width * grow, height = native.height * grow;
+  const bound = Math.min(1, 3840 / width, 3840 / height, Math.sqrt(3840 * 2160 / (width * height)));
   return {
-    ...viewportDimensions({ width: native.width * 100 / scale, height: native.height * 100 / scale }),
+    width: Math.max(320, Math.floor((width * bound + 1e-6) / 2) * 2),
+    height: Math.max(240, Math.floor((height * bound + 1e-6) / 2) * 2),
     scalePercent: scale,
   };
 }
