@@ -3,6 +3,7 @@ name: Deploy streaming PWA
 on:
   push:
     branches: [main]
+    paths: [site/**, .github/workflows/pages.yml]
   workflow_dispatch:
 
 permissions:
@@ -22,10 +23,25 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - name: Validate distribution allowlist and hashes
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, pathlib, re
+          root = pathlib.Path("site")
+          manifest = json.loads((root / "distribution.json").read_text())
+          assert re.fullmatch(r"stream-[0-9a-f]{16}\.js", manifest["entry"])
+          expected = {"index.html", "style.css", "sw.js", "microphone-worklet.js",
+                      "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png",
+                      "COPYING.txt", "SOURCE.txt", manifest["entry"]}
+          assert set(manifest["files"]) == expected
+          assert {p.name for p in root.iterdir()} == expected | {"distribution.json"}
+          for name, digest in manifest["files"].items():
+              assert hashlib.sha256((root / name).read_bytes()).hexdigest() == digest, name
+          PY
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: site
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
