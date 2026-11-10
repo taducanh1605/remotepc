@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
-import { viewportDimensions } from "./protocol.mjs";
+import { desktopViewport } from "./protocol.mjs";
 
 const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
 const app = readFileSync(new URL("./app.js", import.meta.url), "utf8").replace(/\r\n/g, "\n");
@@ -57,6 +57,53 @@ test("RTT bitrate adaptation is a persisted default-off menu option negotiated a
   assert.doesNotMatch(app, /target <20 ms/);
 });
 
+test("desktop scale is persisted, auto-calculated and applied live through session resize", () => {
+  assert.match(html, /id="auto-desktop-scale" type="checkbox"/);
+  assert.doesNotMatch(html, /id="auto-desktop-scale"[^>]*checked/);
+  assert.match(html, /<label for="desktop-scale">Desktop scale<\/label>/);
+  const setup = app.slice(app.indexOf("try {\n  const savedScale"), app.indexOf("async function waitForViewport()"));
+  const controls = {
+    "desktop-scale": { value: "100", options: ["100","125","150","175","200","250","300"].map(value => ({ value })) },
+    "auto-desktop-scale": { checked: false },
+    "stream-detail": { value: "auto" },
+    "desktop-scale-status": {},
+    zoom: { value: 2, dispatchEvent() {} },
+  };
+  for (const control of Object.values(controls)) control.addEventListener = function(_type, callback) { this.change = callback; };
+  const saved = new Map(), events = [];
+  const context = {
+    $: id => controls[id],
+    localStorage: { getItem: key => saved.get(key) ?? null, setItem: (key, value) => saved.set(key, value) },
+    screen: { videoWidth: 780, videoHeight: 1688, addEventListener() {} }, desktopViewport,
+    viewport: () => ({ width: 390, height: 844 }), window: { devicePixelRatio: 3 },
+    backend: "native-host", displayLeader: true,
+    release: () => events.push("release"), resized: () => events.push("resize"),
+    Event: class {}, status: message => { throw new Error(message); },
+  };
+  runInNewContext(setup, context);
+  assert.equal(controls["auto-desktop-scale"].checked, false);
+  assert.equal(controls["desktop-scale"].disabled, false);
+  controls["auto-desktop-scale"].checked = true;
+  controls["auto-desktop-scale"].change();
+  assert.equal(controls["desktop-scale"].disabled, true);
+  assert.match(controls["desktop-scale-status"].textContent, /200% · 390×844/);
+  assert.deepEqual(events, ["release", "resize"]);
+  assert.equal(controls.zoom.value, 1);
+  assert.equal(saved.get("njk-auto-desktop-scale"), "true");
+  controls["auto-desktop-scale"].checked = false;
+  controls["desktop-scale"].value = "150";
+  controls["desktop-scale"].change();
+  assert.match(controls["desktop-scale-status"].textContent, /150% · 520×1124/);
+  assert.equal(saved.get("njk-desktop-scale"), "150");
+  controls["desktop-scale"].value = "100";
+  runInNewContext(setup, context);
+  assert.equal(controls["desktop-scale"].value, "150");
+  assert.equal(controls["auto-desktop-scale"].checked, false);
+  context.displayLeader = false;
+  context.updateDesktopScaleStatus();
+  assert.match(controls["desktop-scale-status"].textContent, /scale needs display control/);
+});
+
 test("applying 120 FPS after reducing 4K detail sends viewport before quality", () => {
   const events = [], button = { addEventListener(_type, callback) { this.apply = callback; } };
   const controls = { "apply-quality": button, "quality-request": {} };
@@ -99,7 +146,7 @@ test("automatic viewport updates preserve the adaptive budget with compatible le
       viewport: () => ({ height: 800 }), resizeTimer: undefined, clearTimeout() {},
       setTimeout: callback => callback(), sendViewport: () => true,
       $: () => ({ value: "auto" }), requestedQuality: () => ({ fps: 60, bitrateKbps: 9216 }),
-      capabilities: { latencyControl }, send: message => events.push(message),
+      capabilities: { latencyControl }, send: message => events.push(message), updateDesktopScaleStatus() {},
     });
     assert.equal(events[0].bitrateKbps, 9216);
     assert.equal(events[0].adaptive, latencyControl ? true : undefined);
@@ -169,10 +216,10 @@ test("PWA resolution uses the entire usable viewport without a reserved accessor
   const source = app.slice(app.indexOf("const dimensions ="), app.indexOf("function requestedQuality()"));
   for (const height of [300, 500, 800]) {
     const result = runInNewContext(`${source}; dimensions()`, {
-      viewport: () => ({ width: 400, height }), viewportDimensions,
+      viewport: () => ({ width: 400, height }), desktopViewport,
       $: id => {
-        assert.equal(id, "stream-detail", "menu visibility must not affect host dimensions");
-        return { value: "1" };
+        assert.ok(["stream-detail", "desktop-scale", "auto-desktop-scale"].includes(id), "menu visibility must not affect host dimensions");
+        return { value: id === "desktop-scale" ? "100" : "1", checked: false };
       },
     });
     assert.equal(result.width, 400);

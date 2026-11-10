@@ -15,6 +15,17 @@ export function viewportDimensions(viewport, pixelRatio = 1) {
   };
 }
 
+export function desktopViewport(viewport, pixelRatio = 1, scalePercent = 100, automatic = false) {
+  const native = viewportDimensions(viewport, pixelRatio);
+  const scale = automatic
+    ? Math.max(100, Math.min(300, Math.round(Math.min(native.width / viewport.width, native.height / viewport.height) * 4) * 25))
+    : Math.max(100, Math.min(300, scalePercent));
+  return {
+    ...viewportDimensions({ width: native.width * 100 / scale, height: native.height * 100 / scale }),
+    scalePercent: scale,
+  };
+}
+
 export function automaticBitrate(width, height, fps) {
   return Math.max(2000, Math.min(20000, Math.floor(width * height * fps / 6000)));
 }

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   automaticBitrate,
+  desktopViewport,
   coalescedPointerEvent,
   hostEndpoint,
   isTransientNetworkError,
@@ -77,6 +78,37 @@ test("viewport sizes are even, bounded and rotated", () => {
     assert.equal(width % 2, 0);
     assert.equal(height % 2, 0);
   }
+});
+test("desktop scale defaults preserve resolution and automatic scale matches CSS device size", () => {
+  for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }, { width: 1440, height: 900 }]) {
+    const unchanged = desktopViewport(viewport, 3);
+    assert.deepEqual({ width: unchanged.width, height: unchanged.height }, viewportDimensions(viewport, 3));
+    const auto = desktopViewport(viewport, 3, 100, true);
+    assert.equal(auto.scalePercent, 200);
+    assert.deepEqual({ width: auto.width, height: auto.height }, viewportDimensions(viewport));
+  }
+  assert.deepEqual(desktopViewport({ width: 390, height: 844 }, 2, 200), { width: 390, height: 844, scalePercent: 200 });
+  assert.deepEqual(desktopViewport({ width: 390, height: 844 }, 2, 150), { width: 520, height: 1124, scalePercent: 150 });
+  assert.deepEqual(desktopViewport({ width: 390, height: 844 }, 1, 200, true), { width: 390, height: 844, scalePercent: 100 });
+});
+test("desktop scale is bounded after rotation, keyboard geometry and codec resolution limits", () => {
+  for (const viewport of [{ width: 393, height: 852 }, { width: 852, height: 393 }, { width: 390, height: 100 }, { width: 7680, height: 4320 }, { width: 320, height: 240 }]) {
+    for (const automatic of [false, true]) {
+      for (const scale of [100, 125, 150, 200, 300]) {
+        const result = desktopViewport(viewport, 3, scale, automatic);
+        assert.ok(result.width >= 320 && result.width <= 3840);
+        assert.ok(result.height >= 240 && result.height <= 2160);
+        assert.equal(result.width % 2, 0);
+        assert.equal(result.height % 2, 0);
+      }
+    }
+  }
+  assert.equal(desktopViewport({ width: 390, height: 100 }, 2, 100, true).scalePercent, 200);
+  const scaled = desktopViewport({ width: 393, height: 852 }, 3, 100, true);
+  const video = { videoWidth: scaled.width, videoHeight: scaled.height, getBoundingClientRect: () => ({ left: 0, top: 0, width: 393, height: 852 }) };
+  const point = pointerPosition({ clientX: 196.5, clientY: 426 }, video);
+  assert.equal(point.x, .5);
+  assert.ok(Math.abs(point.y - .5) < .003);
 });
 test("pointer coordinates match top-aligned video and exclude lower letterboxing", () => {
   const video = {videoWidth: 1920, videoHeight: 1080, getBoundingClientRect: () => ({left: 0, top: 0, width: 1000, height: 1000})};
