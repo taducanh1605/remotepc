@@ -70,6 +70,8 @@
         <select id="stream-bitrate"><option value="auto">Auto</option><option value="1000">1 Mbps</option><option value="2000">2 Mbps</option><option value="4000">4 Mbps</option><option value="8000">8 Mbps</option><option value="12000">12 Mbps</option><option value="20000">20 Mbps</option></select>
         <button id="apply-quality" disabled>Apply quality</button>
         <label class="check-option"><input id="latency-adaptation" type="checkbox" disabled> Reduce bitrate at high RTT</label>
+        <label class="check-option"><input id="video-adaptation" type="checkbox" checked> Reduce bitrate on video packet loss</label>
+        <p class="hint">RTT reduction is off by default. Turn both reductions off to keep your chosen bitrate; a weak link may then freeze. Apply quality to restore a previously reduced bitrate.</p>
         <output id="video-quality">Video quality: negotiating…</output>
         <output id="quality-request" role="status" aria-live="polite"></output>
         <output id="audio-status" role="status" aria-live="polite"></output>
@@ -100,6 +102,6 @@
       </dialog>
     </section>
   </main>
-  <script type="module" src="./stream-efa577fee90b2e4f.js"></script>
+  <script type="module" src="./stream-82ffe48e6ed6abae.js"></script>
 </body>
 </html>
