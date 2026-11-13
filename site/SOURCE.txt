@@ -1,5 +1,5 @@
 Njk Stream browser distribution
 License: GPL-3.0; see COPYING.txt.
 Corresponding preferred-form source, tests and build instructions:
-https://github.com/taducanh1605/remotepc/releases/tag/pwa-v49
+https://github.com/taducanh1605/remotepc/releases/tag/pwa-v50
 Obfuscation discourages casual reading; browser code is not confidential or irreversible.
