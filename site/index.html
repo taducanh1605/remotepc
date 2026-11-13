@@ -22,6 +22,12 @@
       <label for="token">Access token</label>
       <input id="token" name="token" type="password" required minlength="32" autocomplete="off" spellcheck="false">
       <label class="check-option"><input id="connect-fullscreen" type="checkbox"> Fullscreen</label>
+      <details id="connection-settings">
+        <summary>Connection settings</summary>
+        <label for="connection-bitrate">Bitrate limit</label>
+        <select id="connection-bitrate" aria-describedby="connection-bitrate-status"><option value="auto">Auto</option></select>
+        <output id="connection-bitrate-status" role="status" aria-live="polite"></output>
+      </details>
       <button type="submit" id="connect">Connect</button>
     </form>
     <p id="status" role="status" aria-live="polite">Disconnected</p>
@@ -69,6 +75,7 @@
         <output id="desktop-scale-status" role="status" aria-live="polite"></output>
         <label for="stream-bitrate">Bitrate limit</label>
         <select id="stream-bitrate"><option value="auto">Auto</option><option value="1000">1 Mbps</option><option value="2000">2 Mbps</option><option value="4000">4 Mbps</option><option value="8000">8 Mbps</option><option value="12000">12 Mbps</option><option value="20000">20 Mbps</option><option value="30000">30 Mbps</option><option value="40000">40 Mbps</option><option value="60000">60 Mbps</option><option value="80000">80 Mbps</option><option value="100000">100 Mbps</option></select>
+        <output id="bitrate-limit-status" role="status" aria-live="polite"></output>
         <p class="hint">Higher bitrates require an updated Host and enough network/decoder capacity. 100 Mbps is a limit, not a guarantee of sharper or faster video.</p>
         <button id="apply-quality" disabled>Apply quality</button>
         <label class="check-option"><input id="latency-adaptation" type="checkbox" disabled> Reduce bitrate at high RTT</label>
@@ -114,6 +121,6 @@
       </dialog>
     </section>
   </main>
-  <script type="module" src="./stream-b437e94f00090920.js"></script>
+  <script type="module" src="./stream-8a0aac32c6bc3849.js"></script>
 </body>
 </html>
