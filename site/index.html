@@ -25,6 +25,7 @@
       <button type="submit" id="connect">Connect</button>
     </form>
     <p id="status" role="status" aria-live="polite">Disconnected</p>
+    <p id="android-download">Can't connect in your browser? <a href="https://github.com/taducanh1605/remotepc/releases?q=android-v" target="_blank" rel="noopener noreferrer">Download Njk Stream for Android (APK)</a> and try the native app. Choose the APK for your device on the Android releases page.</p>
     <p id="handoff-recovery" hidden><a href="https://taducanh1605.github.io/espwake/">Return to ESPWake and open RemotePC again</a></p>
     <section id="stream-shell" aria-label="Remote stream" hidden>
       <p id="stream-loading" role="status" hidden>Connecting…</p>
@@ -64,14 +65,15 @@
         <select id="stream-detail"><option value="auto">Auto</option><option value="1">Standard (1×)</option><option value="2">High (2×)</option></select>
         <label for="desktop-scale">Windows DPI</label>
         <select id="desktop-scale"><option value="0">System</option><option value="100">100%</option><option value="125">125%</option><option value="150">150%</option><option value="175">175%</option><option value="200">200%</option><option value="225">225%</option><option value="250">250%</option><option value="300">300%</option></select>
-        <label class="check-option"><input id="auto-desktop-scale" type="checkbox" checked> Auto DPI</label>
+        <label class="check-option"><input id="auto-desktop-scale" type="checkbox"> Auto DPI</label>
         <output id="desktop-scale-status" role="status" aria-live="polite"></output>
         <label for="stream-bitrate">Bitrate limit</label>
-        <select id="stream-bitrate"><option value="auto">Auto</option><option value="1000">1 Mbps</option><option value="2000">2 Mbps</option><option value="4000">4 Mbps</option><option value="8000">8 Mbps</option><option value="12000">12 Mbps</option><option value="20000">20 Mbps</option></select>
+        <select id="stream-bitrate"><option value="auto">Auto</option><option value="1000">1 Mbps</option><option value="2000">2 Mbps</option><option value="4000">4 Mbps</option><option value="8000">8 Mbps</option><option value="12000">12 Mbps</option><option value="20000">20 Mbps</option><option value="30000">30 Mbps</option><option value="40000">40 Mbps</option><option value="60000">60 Mbps</option><option value="80000">80 Mbps</option><option value="100000">100 Mbps</option></select>
+        <p class="hint">Higher bitrates require an updated Host and enough network/decoder capacity. 100 Mbps is a limit, not a guarantee of sharper or faster video.</p>
         <button id="apply-quality" disabled>Apply quality</button>
         <label class="check-option"><input id="latency-adaptation" type="checkbox" disabled> Reduce bitrate at high RTT</label>
-        <label class="check-option"><input id="video-adaptation" type="checkbox" checked> Reduce bitrate on video packet loss</label>
-        <p class="hint">RTT reduction is off by default. Turn both reductions off to keep your chosen bitrate; a weak link may then freeze. Apply quality to restore a previously reduced bitrate.</p>
+        <label class="check-option"><input id="video-adaptation" type="checkbox"> Reduce bitrate on video packet loss</label>
+        <p class="hint">Both bitrate reductions and Auto DPI are off by default; saved choices are preserved. With reductions off, a weak link may freeze. Apply quality to restore a previously reduced bitrate.</p>
         <output id="video-quality">Video quality: negotiating…</output>
         <output id="quality-request" role="status" aria-live="polite"></output>
         <output id="audio-status" role="status" aria-live="polite"></output>
@@ -84,6 +86,12 @@
         <label for="gamepad-profile">Gamepad mapping</label>
         <select id="gamepad-profile" aria-describedby="gamepad-attention gamepad-profile-help"><option value="standard">Standard (default)</option><option value="xbox-android-chromium">Xbox / Android Chromium (partial)</option></select>
         <p id="gamepad-profile-help" class="hint">Use compatibility only for the shifted Xbox buttons and right stick appearing as triggers. Leave Standard selected when input is correct.</p>
+        <details id="browser-recommendations">
+          <summary>Browser recommendations: video and gamepads</summary>
+          <p class="hint">Android / Windows: start with updated Chrome or Edge. iPhone / iPad / Mac: start with updated Safari. Hardware decoding depends on the device, codec and resolution; no browser is guaranteed fastest. Compare decode/frame, dropped frames and packet loss above.</p>
+          <p class="hint">Xbox Series controllers are supported through the OS and Gamepad API, not a raw Xbox connection to this PWA. Update controller firmware and OS; test every button, trigger and stick in Standard first. Changing Chromium-based brands may retain the same mapping bug. Firefox is a different-engine alternative to test, not a verified mapping or performance fix.</p>
+          <p class="hint">Sources: <a href="https://support.xbox.com/en-US/help/games-apps/cloud-gaming/supported-browsers" target="_blank" rel="noopener noreferrer">Microsoft browser support</a> (cloud-gaming baseline, not a Njk benchmark), <a href="https://support.apple.com/en-us/111101" target="_blank" rel="noopener noreferrer">Apple Xbox controller support</a>, <a href="https://developer.mozilla.org/en-US/docs/Web/API/Gamepad_API" target="_blank" rel="noopener noreferrer">Gamepad API</a>, <a href="https://developer.mozilla.org/en-US/docs/Web/API/RTCInboundRtpStreamStats/totalDecodeTime" target="_blank" rel="noopener noreferrer">decode timing</a>.</p>
+        </details>
         <output id="gamepad-status" role="status" aria-live="polite"></output>
         <output id="latency" aria-live="polite">Control RTT: measuring…</output>
         <p id="input-capabilities" role="status" aria-live="polite">Waiting for host input capabilities.</p>
@@ -106,6 +114,6 @@
       </dialog>
     </section>
   </main>
-  <script type="module" src="./stream-106e911b42062e2a.js"></script>
+  <script type="module" src="./stream-b437e94f00090920.js"></script>
 </body>
 </html>
