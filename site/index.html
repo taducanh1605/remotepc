@@ -79,7 +79,11 @@
         <button id="pointer-lock">Lock mouse</button>
         <button id="desktop-audio" disabled>Mute desktop audio</button>
         <output id="keyboard-status" role="status" aria-live="polite"></output>
-        <label class="check-option"><input id="gamepad" type="checkbox" checked disabled> Enable gamepads</label>
+        <label class="check-option"><input id="gamepad" type="checkbox" checked disabled aria-describedby="gamepad-attention"> Enable gamepads</label>
+        <p id="gamepad-attention" class="hint">Attention: Some browsers mis-map gamepads. Compatibility mode cannot restore missing inputs.</p>
+        <label for="gamepad-profile">Gamepad mapping</label>
+        <select id="gamepad-profile" aria-describedby="gamepad-attention gamepad-profile-help"><option value="standard">Standard (default)</option><option value="xbox-android-chromium">Xbox / Android Chromium (partial)</option></select>
+        <p id="gamepad-profile-help" class="hint">Use compatibility only for the shifted Xbox buttons and right stick appearing as triggers. Leave Standard selected when input is correct.</p>
         <output id="gamepad-status" role="status" aria-live="polite"></output>
         <output id="latency" aria-live="polite">Control RTT: measuring…</output>
         <p id="input-capabilities" role="status" aria-live="polite">Waiting for host input capabilities.</p>
@@ -102,6 +106,6 @@
       </dialog>
     </section>
   </main>
-  <script type="module" src="./stream-5a2705a9422d75a5.js"></script>
+  <script type="module" src="./stream-50c49c51bf5d9820.js"></script>
 </body>
 </html>
