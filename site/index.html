@@ -25,7 +25,9 @@
       <details id="connection-settings">
         <summary>Connection settings</summary>
         <label class="check-option"><input id="unified-connection" type="checkbox" aria-describedby="unified-help"> Unified connection</label>
-        <p id="unified-help" class="hint">Off: separate video, audio and input connections. On: all three share one WebRTC connection. Applies on the next connection.</p>
+        <label for="connection-group">Connection grouping</label>
+        <select id="connection-group" disabled><option value="all">All unified</option><option value="video-audio">Video + audio</option><option value="video-input">Video + input</option><option value="audio-input">Audio + input</option></select>
+        <p id="unified-help" class="hint">Off: three separate connections. On: combine the selected signals; the remaining signal uses its own connection. Applies when reconnecting. Video + input and Audio + input require an updated Host.</p>
         <label for="connection-bitrate">Bitrate limit</label>
         <select id="connection-bitrate" aria-describedby="connection-bitrate-status"><option value="auto">Auto</option></select>
         <output id="connection-bitrate-status" role="status" aria-live="polite"></output>
@@ -68,6 +70,10 @@
         </div>
 
         <output id="playback-status" role="status" aria-live="polite"></output>
+        <label class="check-option"><input id="stream-unified-connection" type="checkbox" aria-describedby="stream-unified-help"> Unified connection</label>
+        <label for="stream-connection-group">Connection grouping</label>
+        <select id="stream-connection-group" disabled><option value="all">All unified</option><option value="video-audio">Video + audio</option><option value="video-input">Video + input</option><option value="audio-input">Audio + input</option></select>
+        <p id="stream-unified-help" class="hint">Saved for your next connection; changing this does not interrupt the current stream.</p>
         <label for="stream-fps">Frame rate</label>
         <select id="stream-fps"><option value="60">60 FPS</option><option value="120">120 FPS</option><option value="90">90 FPS</option><option value="30">30 FPS</option></select>
         <label for="stream-detail">Desktop detail</label>
@@ -133,6 +139,6 @@
       <button type="button" id="browser-help-close">Close</button>
     </dialog>
   </main>
-  <script type="module" src="./stream-0527a7a4cb98f848.js"></script>
+  <script type="module" src="./stream-31d54a3a4c2a00a2.js"></script>
 </body>
 </html>
