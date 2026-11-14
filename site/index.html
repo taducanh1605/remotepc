@@ -79,9 +79,10 @@
         <label for="stream-detail">Desktop detail</label>
         <select id="stream-detail"><option value="auto">Auto</option><option value="1">Standard (1×)</option><option value="2">High (2×)</option></select>
         <label for="desktop-scale">Windows DPI</label>
-        <select id="desktop-scale"><option value="0">System</option><option value="100">100%</option><option value="125">125%</option><option value="150">150%</option><option value="175">175%</option><option value="200">200%</option><option value="225">225%</option><option value="250">250%</option><option value="300">300%</option></select>
+        <select id="desktop-scale"><option value="0">Follow detail / system</option><option value="100">100%</option><option value="125">125%</option><option value="150">150%</option><option value="175">175%</option><option value="200">200%</option><option value="225">225%</option><option value="250">250%</option><option value="300">300%</option></select>
         <label class="check-option"><input id="auto-desktop-scale" type="checkbox"> Auto DPI</label>
         <output id="desktop-scale-status" role="status" aria-live="polite"></output>
+        <p class="hint">With Follow detail / system, explicit 1×/2× detail requests 100%/200% Windows DPI (96/192 DPI). Auto detail keeps system DPI. An explicit Windows DPI value overrides detail; Host display control is required.</p>
         <label for="stream-bitrate">Bitrate limit</label>
         <select id="stream-bitrate"><option value="auto">Auto</option><option value="1000">1 Mbps</option><option value="2000">2 Mbps</option><option value="4000">4 Mbps</option><option value="8000">8 Mbps</option><option value="12000">12 Mbps</option><option value="20000">20 Mbps</option><option value="30000">30 Mbps</option><option value="40000">40 Mbps</option><option value="60000">60 Mbps</option><option value="80000">80 Mbps</option><option value="100000">100 Mbps</option></select>
         <output id="bitrate-limit-status" role="status" aria-live="polite"></output>
@@ -112,13 +113,15 @@
       </details>
     <span id="remote-text-label" hidden>Remote text input</span>
     <div id="remote-text" hidden contenteditable="true" role="textbox" aria-multiline="true" inputmode="none" virtualkeyboardpolicy="manual" tabindex="-1" autocapitalize="off" spellcheck="false" aria-label="Remote keyboard input" aria-describedby="remote-text-help"></div>
-    <p id="remote-text-help" hidden>Text is sent to the focused host control. Tap the same host text field again to open the phone keyboard, or use Keyboard manually. Automatic opening requires host editable-focus confirmation and browser support.</p>
+    <p id="remote-text-help" hidden>Text is sent to the focused host control. Tap the same host text field again to open the phone keyboard, or use Keyboard manually. The keyboard stays open when host text focus changes; close it with Keyboard or the phone's Back button.</p>
       <dialog id="exit-dialog" aria-labelledby="exit-title">
         <h2 id="exit-title">Leave the stream?</h2>
-        <p>Disconnect leaves the host session running. Quit closes the remote session only when no other clients are using it.</p>
+        <p>Reset connection reconnects with the selected quality, image and connection settings. Disconnect leaves the host session running. Quit closes the remote session only when no other clients are using it.</p>
+        <p>The connection stays active when this page is in the background where the browser permits. Android or the browser may suspend networking or discard the page; return here to resume or reconnect.</p>
         <p id="exit-error" role="alert"></p>
         <div class="exit-actions">
         <button id="exit-cancel" type="button" autofocus>Cancel</button>
+        <button id="exit-reset" type="button">Reset connection</button>
         <button id="exit-disconnect" type="button">Disconnect</button>
         <button id="exit-quit" type="button">Quit session</button>
         </div>
@@ -139,6 +142,6 @@
       <button type="button" id="browser-help-close">Close</button>
     </dialog>
   </main>
-  <script type="module" src="./stream-31d54a3a4c2a00a2.js"></script>
+  <script type="module" src="./stream-9fd6f297b738e32e.js"></script>
 </body>
 </html>
