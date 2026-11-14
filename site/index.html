@@ -29,6 +29,7 @@
         <output id="connection-bitrate-status" role="status" aria-live="polite"></output>
       </details>
       <button type="submit" id="connect">Connect</button>
+      <button type="button" id="connection-browser-help">Recommended browsers</button>
     </form>
     <p id="status" role="status" aria-live="polite">Disconnected</p>
     <p id="android-download">Can't connect in your browser? <a href="https://github.com/taducanh1605/remotepc/releases?q=android-v" target="_blank" rel="noopener noreferrer">Download Njk Stream for Android (APK)</a> and try the native app. Choose the APK for your device on the Android releases page.</p>
@@ -93,12 +94,7 @@
         <label for="gamepad-profile">Gamepad mapping</label>
         <select id="gamepad-profile" aria-describedby="gamepad-attention gamepad-profile-help"><option value="standard">Standard (default)</option><option value="xbox-android-chromium">Xbox / Android Chromium (partial)</option></select>
         <p id="gamepad-profile-help" class="hint">Use compatibility only for the shifted Xbox buttons and right stick appearing as triggers. Leave Standard selected when input is correct.</p>
-        <details id="browser-recommendations">
-          <summary>Browser recommendations: video and gamepads</summary>
-          <p class="hint">Android / Windows: start with updated Chrome or Edge. iPhone / iPad / Mac: start with updated Safari. Hardware decoding depends on the device, codec and resolution; no browser is guaranteed fastest. Compare decode/frame, dropped frames and packet loss above.</p>
-          <p class="hint">Xbox Series controllers are supported through the OS and Gamepad API, not a raw Xbox connection to this PWA. Update controller firmware and OS; test every button, trigger and stick in Standard first. Changing Chromium-based brands may retain the same mapping bug. Firefox is a different-engine alternative to test, not a verified mapping or performance fix.</p>
-          <p class="hint">Sources: <a href="https://support.xbox.com/en-US/help/games-apps/cloud-gaming/supported-browsers" target="_blank" rel="noopener noreferrer">Microsoft browser support</a> (cloud-gaming baseline, not a Njk benchmark), <a href="https://support.apple.com/en-us/111101" target="_blank" rel="noopener noreferrer">Apple Xbox controller support</a>, <a href="https://developer.mozilla.org/en-US/docs/Web/API/Gamepad_API" target="_blank" rel="noopener noreferrer">Gamepad API</a>, <a href="https://developer.mozilla.org/en-US/docs/Web/API/RTCInboundRtpStreamStats/totalDecodeTime" target="_blank" rel="noopener noreferrer">decode timing</a>.</p>
-        </details>
+        <button type="button" id="stream-browser-help">Recommended browsers</button>
         <output id="gamepad-status" role="status" aria-live="polite"></output>
         <output id="latency" aria-live="polite">Control RTT: measuring…</output>
         <p id="input-capabilities" role="status" aria-live="polite">Waiting for host input capabilities.</p>
@@ -120,7 +116,21 @@
         </div>
       </dialog>
     </section>
+    <dialog id="browser-recommendations" aria-labelledby="browser-recommendations-title">
+      <h2 id="browser-recommendations-title">Recommended browsers</h2>
+      <p>Start with the latest version for your device:</p>
+      <ul>
+        <li><strong>Android:</strong> Google Chrome or Microsoft Edge.</li>
+        <li><strong>Windows:</strong> Google Chrome or Microsoft Edge.</li>
+        <li><strong>iPhone, iPad and Mac:</strong> Safari.</li>
+        <li><strong>Firefox:</strong> try as an alternative if controller mapping is wrong; it is not a guaranteed fix.</li>
+      </ul>
+      <p><strong>Video:</strong> H.264 WebRTC support does not guarantee hardware decoding or speed. Compare decode time per frame and dropped frames at the same resolution and frame rate; some browsers do not report decode timing.</p>
+      <p><strong>Gamepads:</strong> pair your controller with the device and test every button, trigger and stick in Standard mode. Xbox Series controller support and mapping depend on the OS, browser and device. The PWA uses the browser Gamepad API, not a raw native Xbox connection; different Chromium browsers may share the same mapping issue.</p>
+      <p>These are starting points, not a measured ranking or a guarantee. Sources: <a href="https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Formats/WebRTC_codecs" target="_blank" rel="noopener noreferrer">MDN WebRTC codecs</a>, <a href="https://developer.mozilla.org/en-US/docs/Web/API/RTCInboundRtpStreamStats/totalDecodeTime" target="_blank" rel="noopener noreferrer">decode timing</a>, <a href="https://developer.mozilla.org/en-US/docs/Web/API/Gamepad_API" target="_blank" rel="noopener noreferrer">Gamepad API</a>, <a href="https://support.xbox.com/en-US/help/games-apps/cloud-gaming/supported-browsers" target="_blank" rel="noopener noreferrer">Xbox cloud gaming browsers</a> (not a Njk benchmark).</p>
+      <button type="button" id="browser-help-close">Close</button>
+    </dialog>
   </main>
-  <script type="module" src="./stream-8a0aac32c6bc3849.js"></script>
+  <script type="module" src="./stream-31893b678bca4573.js"></script>
 </body>
 </html>
