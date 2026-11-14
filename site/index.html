@@ -24,6 +24,8 @@
       <label class="check-option"><input id="connect-fullscreen" type="checkbox"> Fullscreen</label>
       <details id="connection-settings">
         <summary>Connection settings</summary>
+        <label class="check-option"><input id="unified-connection" type="checkbox" aria-describedby="unified-help"> Unified connection</label>
+        <p id="unified-help" class="hint">Off: separate video, audio and input connections. On: all three share one WebRTC connection. Applies on the next connection.</p>
         <label for="connection-bitrate">Bitrate limit</label>
         <select id="connection-bitrate" aria-describedby="connection-bitrate-status"><option value="auto">Auto</option></select>
         <output id="connection-bitrate-status" role="status" aria-live="polite"></output>
@@ -131,6 +133,6 @@
       <button type="button" id="browser-help-close">Close</button>
     </dialog>
   </main>
-  <script type="module" src="./stream-21cd0fee73426086.js"></script>
+  <script type="module" src="./stream-0527a7a4cb98f848.js"></script>
 </body>
 </html>
