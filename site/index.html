@@ -25,8 +25,8 @@
       <details id="connection-settings">
         <summary>Connection settings</summary>
         <label class="check-option"><input id="unified-connection" type="checkbox" aria-describedby="unified-help"> Unified connection</label>
-        <label for="connection-group">Connection grouping</label>
-        <select id="connection-group" disabled><option value="all">All unified</option><option value="video-audio">Video + audio</option><option value="video-input">Video + input</option><option value="audio-input">Audio + input</option></select>
+        <label id="connection-group-label" for="connection-group" hidden>Connection grouping</label>
+        <select id="connection-group" hidden disabled><option value="all">All unified</option><option value="video-audio">Video + audio</option><option value="video-input">Video + input</option><option value="audio-input">Audio + input</option></select>
         <p id="unified-help" class="hint">Off: three separate connections. On: combine the selected signals; the remaining signal uses its own connection. Applies when reconnecting. Video + input and Audio + input require an updated Host.</p>
         <label for="connection-bitrate">Bitrate limit</label>
         <select id="connection-bitrate" aria-describedby="connection-bitrate-status"><option value="auto">Auto</option></select>
@@ -44,14 +44,20 @@
       <details id="stream-tools" hidden>
         <summary aria-label="Remote controls" title="Tap to open. Drag to move; arrow keys move, Home resets."><span class="menu-icon" aria-hidden="true"><span></span><span></span><span></span></span></summary>
         <nav class="stream-menu-controls" aria-label="Remote controls">
+        <fieldset class="control-group"><legend>Quick actions</legend>
         <button id="rotate-screen" type="button" disabled>Rotate screen</button>
         <button id="fullscreen" disabled>Toggle immersive mode</button>
         <button id="soft-keyboard" aria-pressed="false">Keyboard</button>
         <select id="typing-mode" aria-label="Typing mode"><option value="host">Host keyboard / UniKey (US layout)</option><option value="unicode">Direct Unicode / mobile IME</option></select>
-        <label class="check-option"><input id="keyboard-resize" type="checkbox" checked> Resize desktop when keyboard opens</label>
         <button id="disconnect" disabled>Disconnect</button>
         <button id="microphone" disabled aria-pressed="false">Enable microphone</button>
+        <button id="pointer-lock">Lock mouse</button>
+        <button id="desktop-audio" disabled>Mute desktop audio</button>
+        </fieldset>
 
+        <fieldset class="control-group"><legend>Keyboard and input</legend>
+        <label class="check-option"><input id="keyboard-resize" type="checkbox" checked> Resize Host desktop for keyboard</label>
+        <p class="hint">Off: keep Host resolution and fit the whole picture above the keyboard.</p>
         <div id="keyboard-accessory" role="group" aria-label="Remote keyboard extra keys">
           <button type="button" data-key="Escape">ESC</button>
           <button type="button" data-key="ShiftLeft" aria-pressed="false">SHIFT</button>
@@ -69,21 +75,29 @@
           <button type="button" data-key="MetaLeft" aria-pressed="false">WIN</button>
           <button type="button" data-key="AltLeft" aria-pressed="false">ALT</button>
         </div>
-
+        <output id="keyboard-status" role="status" aria-live="polite"></output>
+        </fieldset>
+        <fieldset class="control-group"><legend>Connection</legend>
         <output id="playback-status" role="status" aria-live="polite"></output>
         <label class="check-option"><input id="stream-unified-connection" type="checkbox" aria-describedby="stream-unified-help"> Unified connection</label>
-        <label for="stream-connection-group">Connection grouping</label>
-        <select id="stream-connection-group" disabled><option value="all">All unified</option><option value="video-audio">Video + audio</option><option value="video-input">Video + input</option><option value="audio-input">Audio + input</option></select>
+        <label id="stream-connection-group-label" for="stream-connection-group" hidden>Connection grouping</label>
+        <select id="stream-connection-group" hidden disabled><option value="all">All unified</option><option value="video-audio">Video + audio</option><option value="video-input">Video + input</option><option value="audio-input">Audio + input</option></select>
         <p id="stream-unified-help" class="hint">Saved for your next connection; changing this does not interrupt the current stream.</p>
+        </fieldset>
+        <fieldset class="control-group"><legend>Picture and quality</legend>
         <label for="stream-fps">Frame rate</label>
         <select id="stream-fps"><option value="60">60 FPS</option><option value="120">120 FPS</option><option value="90">90 FPS</option><option value="30">30 FPS</option></select>
         <label for="stream-detail">Desktop detail</label>
-        <select id="stream-detail"><option value="auto">Auto</option><option value="1">Standard (1×)</option><option value="2">High (2×)</option></select>
+        <select id="stream-detail"><option value="auto">Auto (device pixels)</option><option value="1">Standard (1× CSS)</option><option value="2">High (2× CSS)</option></select>
+        <p class="hint">Auto uses the browser's device pixel ratio, bounded by the encoder. Detail changes resolution, never Windows DPI. Privacy settings may hide the true pixel ratio.</p>
+        <label class="check-option"><input id="enable-desktop-scale" type="checkbox"> Allow Windows DPI changes</label>
+        <div id="desktop-dpi-settings" class="control-group" hidden>
         <label for="desktop-scale">Windows DPI</label>
-        <select id="desktop-scale"><option value="0">Follow detail / system</option><option value="100">100%</option><option value="125">125%</option><option value="150">150%</option><option value="175">175%</option><option value="200">200%</option><option value="225">225%</option><option value="250">250%</option><option value="300">300%</option></select>
+        <select id="desktop-scale"><option value="0">Restore system DPI</option><option value="100">100%</option><option value="125">125%</option><option value="150">150%</option><option value="175">175%</option><option value="200">200%</option><option value="225">225%</option><option value="250">250%</option><option value="300">300%</option></select>
         <label class="check-option"><input id="auto-desktop-scale" type="checkbox"> Auto DPI</label>
+        </div>
         <output id="desktop-scale-status" role="status" aria-live="polite"></output>
-        <p class="hint">With Follow detail / system, explicit 1×/2× detail requests 100%/200% Windows DPI (96/192 DPI). Auto detail keeps system DPI. An explicit Windows DPI value overrides detail; Host display control is required.</p>
+        <p class="hint">DPI control is off by default. Off sends no DPI command, including on reconnect, and does not restore/change the current Host DPI. Enabling DPI control can resize game windows.</p>
         <label for="stream-bitrate">Bitrate limit</label>
         <select id="stream-bitrate"><option value="auto">Auto</option><option value="1000">1 Mbps</option><option value="2000">2 Mbps</option><option value="4000">4 Mbps</option><option value="8000">8 Mbps</option><option value="12000">12 Mbps</option><option value="20000">20 Mbps</option><option value="30000">30 Mbps</option><option value="40000">40 Mbps</option><option value="60000">60 Mbps</option><option value="80000">80 Mbps</option><option value="100000">100 Mbps</option></select>
         <output id="bitrate-limit-status" role="status" aria-live="polite"></output>
@@ -91,15 +105,13 @@
         <button id="apply-quality" disabled>Apply quality</button>
         <label class="check-option"><input id="latency-adaptation" type="checkbox" disabled> Reduce bitrate at high RTT</label>
         <label class="check-option"><input id="video-adaptation" type="checkbox"> Reduce bitrate on video loss below 25 FPS</label>
-        <p class="hint">Video-loss reduction requires three consecutive low-FPS samples. At 25 FPS or higher, packet loss alone does not lower bitrate. This does not change desktop resolution. Disable keyboard resize to keep the Host resolution while the keyboard covers/pans the view.</p>
+        <p class="hint">Video-loss reduction requires three consecutive low-FPS samples. At 25 FPS or higher, packet loss alone does not lower bitrate. This does not change desktop resolution.</p>
         <p class="hint">Both bitrate reductions and Auto DPI are off by default; saved choices are preserved. With reductions off, a weak link may freeze. Apply quality to restore a previously reduced bitrate.</p>
         <output id="video-quality">Video quality: negotiating…</output>
         <output id="quality-request" role="status" aria-live="polite"></output>
         <output id="audio-status" role="status" aria-live="polite"></output>
-
-        <button id="pointer-lock">Lock mouse</button>
-        <button id="desktop-audio" disabled>Mute desktop audio</button>
-        <output id="keyboard-status" role="status" aria-live="polite"></output>
+        </fieldset>
+        <fieldset class="control-group"><legend>Controllers</legend>
         <label class="check-option"><input id="gamepad" type="checkbox" checked disabled aria-describedby="gamepad-attention"> Enable gamepads</label>
         <p id="gamepad-attention" class="hint">Attention: Some browsers mis-map gamepads. Compatibility mode cannot restore missing inputs.</p>
         <label for="gamepad-profile">Gamepad mapping</label>
@@ -107,10 +119,13 @@
         <p id="gamepad-profile-help" class="hint">Use compatibility only for the shifted Xbox buttons and right stick appearing as triggers. Leave Standard selected when input is correct.</p>
         <button type="button" id="stream-browser-help">Recommended browsers</button>
         <output id="gamepad-status" role="status" aria-live="polite"></output>
+        </fieldset>
+        <details class="control-group"><summary>Diagnostics</summary>
         <output id="latency" aria-live="polite">Control RTT: measuring…</output>
         <p id="input-capabilities" role="status" aria-live="polite">Waiting for host input capabilities.</p>
         <p id="capture-status" role="status" aria-live="polite">Input capture off</p>
         <p id="stream-status" role="status" aria-live="polite"></p>
+        </details>
         </nav>
       </details>
     <span id="remote-text-label" hidden>Remote text input</span>
@@ -144,6 +159,6 @@
       <button type="button" id="browser-help-close">Close</button>
     </dialog>
   </main>
-  <script type="module" src="./stream-c4035c64f746d686.js"></script>
+  <script type="module" src="./stream-9dc4d3ed230930ef.js"></script>
 </body>
 </html>

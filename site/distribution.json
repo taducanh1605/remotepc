@@ -1,19 +1,19 @@
 {
   "schema": 1,
   "product": "njk-pwa",
-  "version": 60,
-  "entry": "stream-c4035c64f746d686.js",
+  "version": 61,
+  "entry": "stream-9dc4d3ed230930ef.js",
   "files": {
     "COPYING.txt": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
-    "SOURCE.txt": "bb8f56c43bab02f2b89a4d40ba041bbf0850667c7a00612fc3abb3be7259609c",
+    "SOURCE.txt": "a583e8bcb7c8920265f8870f0f8facc7b3435743f7592957f1b09178e675004b",
     "icon-192.png": "35ad8445c93d5076d142d2f861da55fb131d0449d662ab39fe05135f938c9778",
     "icon-512.png": "6b5bd0e8d316009d6f754f49426b9c3a58fa689c6b15959e0b62d60d6fcd12c4",
     "icon.svg": "a8b76d4afa5883453c40eb75a7a1b478968557e07ebb3f9066550f831b9c1fc3",
-    "index.html": "9c332991e736f0df825f2caa1eef23550d0321a7cafe187ef07db0b6d3fd732f",
+    "index.html": "73dfd5d7e77823e5bd3d8d556ae9e00f034985af7b89595cc284385c1554c1bf",
     "manifest.webmanifest": "18a9868cad3d0b270336679963a4d5ef73c17d74bcd6c3aa33e73b5ff0695ba7",
     "microphone-worklet.js": "7f97b515228c38d3e6f9117f759b314dacc217edb46fd4c6da966193c3d6d218",
-    "stream-c4035c64f746d686.js": "c4035c64f746d6862b327cc5ca29e3f82b6123fb062204cfb1e4abf6921388d8",
-    "style.css": "9205b0d9b96efca534a90415938086ffa8251a26301bddd8e92c5a393796ebfb",
-    "sw.js": "6833c58808982bf39df7505a49f74afd3297864666a8d597c0942bdc03ef3ecf"
+    "stream-9dc4d3ed230930ef.js": "9dc4d3ed230930ef3657600c500944e5abf2bf1152a7d8270028fdfa3afb8210",
+    "style.css": "0916a56bd39fbeb252eecfc91e07eb0c8badced2768ba610c5b5f2859dcdb4e3",
+    "sw.js": "e0f93cf243ee39fd7d259431e2537e562155d2e0203271d3b507bf363355a5b3"
   }
 }
