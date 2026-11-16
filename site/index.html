@@ -48,6 +48,7 @@
         <button id="fullscreen" disabled>Toggle immersive mode</button>
         <button id="soft-keyboard" aria-pressed="false">Keyboard</button>
         <select id="typing-mode" aria-label="Typing mode"><option value="host">Host keyboard / UniKey (US layout)</option><option value="unicode">Direct Unicode / mobile IME</option></select>
+        <label class="check-option"><input id="keyboard-resize" type="checkbox" checked> Resize desktop when keyboard opens</label>
         <button id="disconnect" disabled>Disconnect</button>
         <button id="microphone" disabled aria-pressed="false">Enable microphone</button>
 
@@ -89,7 +90,8 @@
         <p class="hint">Higher bitrates require an updated Host and enough network/decoder capacity. 100 Mbps is a limit, not a guarantee of sharper or faster video.</p>
         <button id="apply-quality" disabled>Apply quality</button>
         <label class="check-option"><input id="latency-adaptation" type="checkbox" disabled> Reduce bitrate at high RTT</label>
-        <label class="check-option"><input id="video-adaptation" type="checkbox"> Reduce bitrate on video packet loss</label>
+        <label class="check-option"><input id="video-adaptation" type="checkbox"> Reduce bitrate on video loss below 25 FPS</label>
+        <p class="hint">Video-loss reduction requires three consecutive low-FPS samples. At 25 FPS or higher, packet loss alone does not lower bitrate. This does not change desktop resolution. Disable keyboard resize to keep the Host resolution while the keyboard covers/pans the view.</p>
         <p class="hint">Both bitrate reductions and Auto DPI are off by default; saved choices are preserved. With reductions off, a weak link may freeze. Apply quality to restore a previously reduced bitrate.</p>
         <output id="video-quality">Video quality: negotiating…</output>
         <output id="quality-request" role="status" aria-live="polite"></output>
@@ -142,6 +144,6 @@
       <button type="button" id="browser-help-close">Close</button>
     </dialog>
   </main>
-  <script type="module" src="./stream-15b5c05f11db1cd5.js"></script>
+  <script type="module" src="./stream-c4035c64f746d686.js"></script>
 </body>
 </html>
