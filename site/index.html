@@ -28,9 +28,13 @@
         <label id="connection-group-label" for="connection-group" hidden>Connection grouping</label>
         <select id="connection-group" hidden disabled><option value="all">All unified</option><option value="video-audio">Video + audio</option><option value="video-input">Video + input</option><option value="audio-input">Audio + input</option></select>
         <p id="unified-help" class="hint">Off: three separate connections. On: combine the selected signals; the remaining signal uses its own connection. Applies when reconnecting. Video + input and Audio + input require an updated Host.</p>
-        <label for="connection-bitrate">Bitrate limit</label>
+        <label class="check-option"><input id="connection-auto-bitrate" type="checkbox"> Auto bitrate</label>
+        <div id="connection-manual-bitrate">
+        <label for="connection-bitrate">Manual bitrate limit</label>
         <select id="connection-bitrate" aria-describedby="connection-bitrate-status"><option value="auto">Auto</option></select>
         <output id="connection-bitrate-status" role="status" aria-live="polite"></output>
+        </div>
+        <output id="connection-bitrate-recommendation" role="status" aria-live="polite"></output>
       </details>
       <button type="submit" id="connect">Connect</button>
       <button type="button" id="connection-browser-help">Recommended browsers</button>
@@ -98,15 +102,18 @@
         </div>
         <output id="desktop-scale-status" role="status" aria-live="polite"></output>
         <p class="hint">DPI control is off by default. Off sends no DPI command, including on reconnect, and does not restore/change the current Host DPI. Enabling DPI control can resize game windows.</p>
-        <label for="stream-bitrate">Bitrate limit</label>
-        <select id="stream-bitrate"><option value="auto">Auto</option><option value="1000">1 Mbps</option><option value="2000">2 Mbps</option><option value="4000">4 Mbps</option><option value="8000">8 Mbps</option><option value="12000">12 Mbps</option><option value="20000">20 Mbps</option><option value="30000">30 Mbps</option><option value="40000">40 Mbps</option><option value="60000">60 Mbps</option><option value="80000">80 Mbps</option><option value="100000">100 Mbps</option></select>
+        <label class="check-option"><input id="video-adaptation" type="checkbox"> Auto bitrate</label>
+        <div id="stream-manual-bitrate">
+        <label for="stream-bitrate">Manual bitrate limit</label>
+        <select id="stream-bitrate"><option value="auto">Recommended (fixed)</option><option value="1000">1 Mbps</option><option value="2000">2 Mbps</option><option value="4000">4 Mbps</option><option value="8000">8 Mbps</option><option value="12000">12 Mbps</option><option value="20000">20 Mbps</option><option value="30000">30 Mbps</option><option value="40000">40 Mbps</option><option value="60000">60 Mbps</option><option value="80000">80 Mbps</option><option value="100000">100 Mbps</option></select>
         <output id="bitrate-limit-status" role="status" aria-live="polite"></output>
-        <p class="hint">Higher bitrates require an updated Host and enough network/decoder capacity. 100 Mbps is a limit, not a guarantee of sharper or faster video.</p>
+        <p class="hint">Live changes above 20 Mbps require Njk Host 0.1.27 or later and enough network/decoder capacity. 100 Mbps is a limit, not a guarantee of sharper or faster video.</p>
+        </div>
+        <output id="bitrate-recommendation" role="status" aria-live="polite"></output>
+        <p class="hint">Auto chooses a limit for the actual desktop pixel size (including detail/DPI), not the manual selection. After three samples below 25 FPS, the ceiling stays at 20 Mbps or lower and bitrate adapts until Auto is turned off or quality is reapplied. Resolution and Windows DPI are unchanged.</p>
         <button id="apply-quality" disabled>Apply quality</button>
         <label class="check-option"><input id="latency-adaptation" type="checkbox" disabled> Reduce bitrate at high RTT</label>
-        <label class="check-option"><input id="video-adaptation" type="checkbox"> Reduce bitrate on video loss below 25 FPS</label>
-        <p class="hint">Video-loss reduction requires three consecutive low-FPS samples. At 25 FPS or higher, packet loss alone does not lower bitrate. This does not change desktop resolution.</p>
-        <p class="hint">Both bitrate reductions and Auto DPI are off by default; saved choices are preserved. With reductions off, a weak link may freeze. Apply quality to restore a previously reduced bitrate.</p>
+        <p class="hint">Auto bitrate, RTT reduction and Windows DPI control default off; saved choices are preserved. Manual mode permits up to 100 Mbps, but excessive bitrate can overflow the browser's receive buffers.</p>
         <output id="video-quality">Video quality: negotiating…</output>
         <output id="quality-request" role="status" aria-live="polite"></output>
         <output id="audio-status" role="status" aria-live="polite"></output>
@@ -159,6 +166,6 @@
       <button type="button" id="browser-help-close">Close</button>
     </dialog>
   </main>
-  <script type="module" src="./stream-9dc4d3ed230930ef.js"></script>
+  <script type="module" src="./stream-4835f8c434d4124a.js"></script>
 </body>
 </html>
