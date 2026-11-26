@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#14231d">
+  <meta name="color-scheme" content="light dark">
   <meta name="description" content="Authenticated browser desktop streaming for Njk Host">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
@@ -11,8 +12,9 @@
   <title>Njk Stream</title>
 </head>
 <body>
-  <header>
+  <header class="app-header">
     <h1>Njk Stream</h1>
+    <button id="theme-toggle" class="theme-button" type="button" aria-label="Color theme">Auto</button>
   </header>
   <main>
     <form id="connection">
@@ -35,6 +37,7 @@
         <output id="connection-bitrate-status" role="status" aria-live="polite"></output>
         </div>
         <output id="connection-bitrate-recommendation" role="status" aria-live="polite"></output>
+        <label class="check-option"><input id="connection-background-keepalive" type="checkbox" checked> Keep stream alive in background</label>
       </details>
       <button type="submit" id="connect">Connect</button>
       <button type="button" id="connection-browser-help">Recommended browsers</button>
@@ -87,6 +90,9 @@
         <label id="stream-connection-group-label" for="stream-connection-group" hidden>Connection grouping</label>
         <select id="stream-connection-group" hidden disabled><option value="all">All unified</option><option value="video-audio">Video + audio</option><option value="video-input">Video + input</option><option value="audio-input">Audio + input</option></select>
         <p id="stream-unified-help" class="hint">Saved for your next connection; changing this does not interrupt the current stream.</p>
+        <label class="check-option"><input id="background-keepalive" type="checkbox" checked> Keep stream alive in background</label>
+        <label for="stream-theme">Theme</label>
+        <select id="stream-theme"><option value="auto">Auto</option><option value="light">Light</option><option value="dark">Dark</option></select>
         </fieldset>
         <fieldset class="control-group"><legend>Picture and quality</legend>
         <label for="stream-fps">Frame rate</label>
@@ -166,6 +172,6 @@
       <button type="button" id="browser-help-close">Close</button>
     </dialog>
   </main>
-  <script type="module" src="./stream-4835f8c434d4124a.js"></script>
+  <script type="module" src="./stream-4e20230f41c9c7d2.js"></script>
 </body>
 </html>
